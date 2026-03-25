@@ -90,14 +90,14 @@ final class AccessibilityCaptureServiceTests: XCTestCase {
     private var testNC: NotificationCenter!
 
     // Controls what the injected AX query returns for any PID.
-    private var stubbedWindowTitle: String? = "Default Window"
+    nonisolated(unsafe) private var stubbedWindowTitle: String? = "Default Window"
 
     // Counter for verifying query invocation counts.
-    private var titleQueryCount = 0
+    nonisolated(unsafe) private var titleQueryCount = 0
 
     // Trust flags
-    private var isTrusted = true
-    private var trustRequested = false
+    nonisolated(unsafe) private var isTrusted = true
+    nonisolated(unsafe) private var trustRequested = false
 
     private var service: AccessibilityCaptureService!
 
@@ -196,8 +196,9 @@ final class AccessibilityCaptureServiceTests: XCTestCase {
         await service.handleActivation(appName: "Safari", pid: 100, bundleID: "com.apple.safari")
         await service.handleActivation(appName: "Finder", pid: 201, bundleID: "com.apple.finder")
 
+        let events = await delegate.allEvents
         let meta = try XCTUnwrap(
-            (await delegate.allEvents).first?
+            events.first?
                 .metadataJSON
                 .flatMap { AppFocusMetadata.decode(from: $0) }
         )
@@ -213,8 +214,9 @@ final class AccessibilityCaptureServiceTests: XCTestCase {
         await service.handleActivation(appName: "Finder", pid: 201, bundleID: "com.apple.finder")
         await service.handleActivation(appName: "Safari", pid: 100, bundleID: "com.apple.safari")
 
+        let events2 = await delegate.allEvents
         let meta = try XCTUnwrap(
-            (await delegate.allEvents).first?
+            events2.first?
                 .metadataJSON
                 .flatMap { AppFocusMetadata.decode(from: $0) }
         )
@@ -226,7 +228,8 @@ final class AccessibilityCaptureServiceTests: XCTestCase {
         await service.handleActivation(appName: "Terminal", pid: 300, bundleID: "com.apple.Terminal")
         await service.handleActivation(appName: "Safari",   pid: 100, bundleID: "com.apple.safari")
 
-        let event = try XCTUnwrap((await delegate.allEvents).first)
+        let events3 = await delegate.allEvents
+        let event = try XCTUnwrap(events3.first)
         XCTAssertEqual(event.sourceApp, "Terminal")
     }
 
@@ -503,7 +506,8 @@ final class AccessibilityCaptureServiceTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(5))
         await service.stop()
 
-        let event = try XCTUnwrap((await delegate.allEvents).first)
+        let allEvts = await delegate.allEvents
+        let event = try XCTUnwrap(allEvts.first)
         let endedAt = try XCTUnwrap(event.endedAt)
         XCTAssertGreaterThanOrEqual(endedAt, event.startedAt)
     }

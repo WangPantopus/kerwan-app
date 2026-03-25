@@ -219,7 +219,7 @@ public final class MicrophoneCaptureService {
 
         state = .running
         observeEngineConfigChanges()
-        log.info("Started — \(Int(config.targetSampleRate)) Hz mono Float32")
+        log.info("Started — \(Int(self.config.targetSampleRate)) Hz mono Float32")
     }
 
     /// Pauses capture, preserving the current accumulation buffer.
@@ -386,9 +386,7 @@ public final class MicrophoneCaptureService {
         // Regular chunks are discarded when VAD finds no speech.
         // Flushed partial chunks are always delivered (delegate inspects containsSpeech).
         if !isFlush && !vadResult.containsSpeech {
-            log.debug(
-                "VAD discarded chunk: speechSecs=\(String(format: "%.1f", vadResult.speechSeconds))"
-                + " maxDB=\(String(format: "%.1f", vadResult.maxEnergyDB))")
+            log.debug("VAD discarded chunk: speechSecs=\(String(format: "%.1f", vadResult.speechSeconds)) maxDB=\(String(format: "%.1f", vadResult.maxEnergyDB))")
             return
         }
 
@@ -405,11 +403,7 @@ public final class MicrophoneCaptureService {
 
         await delegate.didCaptureAudioChunk(chunk)
 
-        log.info(
-            "Chunk delivered: duration=\(String(format: "%.1f", duration))s"
-            + " speech=\(vadResult.containsSpeech)"
-            + " speechSecs=\(String(format: "%.1f", vadResult.speechSeconds))"
-            + " flush=\(isFlush)")
+        log.info("Chunk delivered: duration=\(String(format: "%.1f", duration))s speech=\(vadResult.containsSpeech) speechSecs=\(String(format: "%.1f", vadResult.speechSeconds)) flush=\(isFlush)")
     }
 
     // MARK: - Private: route change (macOS)

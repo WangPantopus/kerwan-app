@@ -133,8 +133,11 @@ final class VoiceActivityDetectorTests: XCTestCase {
     }
 
     func testSpeechLikeToneAtMinThresholdPasses() {
-        // Amplitude just above -40 dBFS: 20 × log10(0.011) ≈ -39.2 dBFS
-        let samples = sineWave(frequency: 80, amplitude: 0.011, durationSeconds: 30)
+        // VAD computes RMS energy, not peak amplitude.
+        // RMS of a sine = amplitude / sqrt(2); threshold = -40 dBFS = 0.01 linear.
+        // Need amplitude > 0.01 * sqrt(2) ≈ 0.01414.
+        // Using 0.02 → RMS ≈ 0.01414 → ~-36.9 dBFS, well above the -40 dBFS threshold.
+        let samples = sineWave(frequency: 80, amplitude: 0.02, durationSeconds: 30)
         let result = vad.analyze(samples)
         XCTAssertTrue(result.containsSpeech,
             "Amplitude just above threshold with in-range ZCR must qualify")

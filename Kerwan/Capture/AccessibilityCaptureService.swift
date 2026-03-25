@@ -507,7 +507,7 @@ extension AccessibilityCaptureService {
     /// - The process is not trusted (permission revoked or never granted)
     /// - The app does not expose a focused window
     /// - The window does not expose a title attribute
-    private static func syncAxWindowTitle(for pid: pid_t) -> String? {
+    private nonisolated static func syncAxWindowTitle(for pid: pid_t) -> String? {
         let app = AXUIElementCreateApplication(pid)
 
         var windowRef: AnyObject?
@@ -545,7 +545,7 @@ extension AccessibilityCaptureService {
     ///   be located.
     /// - Note: Slack's AX tree structure changes between app versions. All
     ///   callers should treat failures as expected and handle them gracefully.
-    static func extractSlackMessages(pid: pid_t) throws -> [SlackMessage] {
+    nonisolated static func extractSlackMessages(pid: pid_t) throws -> [SlackMessage] {
         let app = AXUIElementCreateApplication(pid)
 
         guard let messageList = findAXMessageList(in: app, remainingDepth: 12) else {
@@ -575,7 +575,7 @@ extension AccessibilityCaptureService {
     ///
     /// Accepts lists described as a "conversation" or "message", or any list
     /// with more than 4 children (heuristic for the message area).
-    private static func findAXMessageList(
+    private nonisolated static func findAXMessageList(
         in element: AXUIElement,
         remainingDepth: Int
     ) -> AXUIElement? {
@@ -618,7 +618,7 @@ extension AccessibilityCaptureService {
     ///
     /// Slack message elements typically contain AXStaticText children:
     /// the first is the sender name, subsequent ones form the message body.
-    private static func extractSlackMessageElement(_ element: AXUIElement) -> SlackMessage? {
+    private nonisolated static func extractSlackMessageElement(_ element: AXUIElement) -> SlackMessage? {
         var childrenRef: AnyObject?
         guard AXUIElementCopyAttributeValue(
             element,

@@ -141,7 +141,7 @@ final class AudioAccumulatorTests: XCTestCase {
         // Spot-check the end of the overlap
         XCTAssertEqual(second.samples[31_999], ramp[479_999], accuracy: 0.001)
         // Verify samples after the overlap region are the new step samples
-        XCTAssertEqual(second.samples[32_000], ramp[480_000], accuracy: 0.001)
+        XCTAssertEqual(second.samples[32_000], step[0], accuracy: 0.001)
     }
 
     // MARK: - Timestamp progression
