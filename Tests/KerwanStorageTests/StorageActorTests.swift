@@ -131,7 +131,7 @@ final class StorageActorTests: XCTestCase {
         XCTAssertEqual(identities.first?.platformId, "U12345")
 
         // Update display name via upsert
-        var updated = identity
+        _ = identity  // updated2 below replaces it via upsert
         let updated2 = ContactIdentity(
             id: identity.id,
             contactId: contact.id,
@@ -169,7 +169,7 @@ final class StorageActorTests: XCTestCase {
         let storage = try makeStorage()
         let client = sampleClient()
         try await storage.upsertClient(client)
-        let project = Project(clientId: client.id, name: "Alpha Launch")
+        _ = Project(clientId: client.id, name: "Alpha Launch") // placeholder; no public insert API yet
         // Projects are not directly exposed as a write method in the public API,
         // so we test via the underlying write connection through a subclass hook.
         // For now, verify fetchProjects returns empty for an unknown client.
@@ -352,7 +352,7 @@ final class StorageActorTests: XCTestCase {
     func test_countUnreviewedSessions() async throws {
         let storage = try makeStorage()
         let s1 = sampleSession()
-        var s2 = sampleSession()
+        let s2 = sampleSession()
         try await storage.insertWorkSession(s1, linkedEventIds: [])
         try await storage.insertWorkSession(s2, linkedEventIds: [])
         let before = await storage.countUnreviewedSessions()
@@ -560,6 +560,55 @@ final class StorageActorTests: XCTestCase {
         let contacts = await storage2.fetchAllContacts()
         XCTAssertEqual(contacts.count, 1)
         XCTAssertEqual(contacts.first?.emailPrimary, "alice@example.com")
+    }
+
+    // MARK: - CapturePauses
+
+    func test_insertCapturePause_andFetch() async throws {
+        let storage = try makeStorage()
+        let pause = CapturePause(reason: "Meeting")
+        try await storage.insertCapturePause(pause)
+        let fetched = await storage.fetchCapturePauses()
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched.first?.id, pause.id)
+        XCTAssertEqual(fetched.first?.reason, "Meeting")
+        XCTAssertNil(fetched.first?.endedAt, "endedAt must be nil for an open pause")
+    }
+
+    func test_endCapturePause_setsEndTime() async throws {
+        let storage = try makeStorage()
+        let pause = CapturePause()
+        try await storage.insertCapturePause(pause)
+
+        let end = Date()
+        try await storage.endCapturePause(id: pause.id, endedAt: end)
+
+        let fetched = await storage.fetchCapturePauses()
+        XCTAssertNotNil(fetched.first?.endedAt)
+        // Timestamps stored as Double; allow ≤1 ms rounding error.
+        let diff = abs((fetched.first?.endedAt?.timeIntervalSince1970 ?? 0) - end.timeIntervalSince1970)
+        XCTAssertLessThan(diff, 0.001)
+    }
+
+    func test_fetchCapturePauses_filteredByDateRange() async throws {
+        let storage = try makeStorage()
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        try await storage.insertCapturePause(CapturePause(startedAt: t0))
+        try await storage.insertCapturePause(CapturePause(startedAt: t0.addingTimeInterval(3600)))
+        try await storage.insertCapturePause(CapturePause(startedAt: t0.addingTimeInterval(7200)))
+
+        // Only the first two fall in the half-open interval [t0, t0+7200).
+        let inRange = await storage.fetchCapturePauses(
+            from: t0,
+            to: t0.addingTimeInterval(7200)
+        )
+        XCTAssertEqual(inRange.count, 2)
+    }
+
+    func test_fetchCapturePauses_empty_returnsEmpty() async throws {
+        let storage = try makeStorage()
+        let results = await storage.fetchCapturePauses()
+        XCTAssertTrue(results.isEmpty)
     }
 
     // MARK: - Maintenance

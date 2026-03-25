@@ -469,6 +469,36 @@ public actor StorageActor {
         try writeConn.execute("DELETE FROM exclusion_rules WHERE id = '\(id)'")
     }
 
+    // MARK: CapturePauses
+
+    /// Inserts a new capture-pause record. `endedAt` is nil until the pause ends.
+    public func insertCapturePause(_ pause: CapturePause) throws {
+        let sql = """
+            INSERT INTO capture_pauses(id, started_at, ended_at, reason)
+            VALUES (?,?,?,?)
+            """
+        let stmt = try writeConn.prepare(sql)
+        defer { sqlite3_finalize(stmt) }
+        try writeConn.bind([
+            .text(pause.id),
+            .from(pause.startedAt),
+            .from(pause.endedAt),
+            .from(pause.reason),
+        ], to: stmt)
+        try writeConn.step(stmt)
+    }
+
+    /// Stamps the end time on an open pause. Safe to call even if the pause is
+    /// already closed (UPDATE is a no-op when `ended_at` is already set via
+    /// re-application; callers should only call this once).
+    public func endCapturePause(id: String, endedAt: Date = .now) throws {
+        let sql = "UPDATE capture_pauses SET ended_at = ? WHERE id = ?"
+        let stmt = try writeConn.prepare(sql)
+        defer { sqlite3_finalize(stmt) }
+        try writeConn.bind([.from(endedAt), .text(id)], to: stmt)
+        try writeConn.step(stmt)
+    }
+
     // MARK: UserSettings
 
     /// Upserts a single key-value setting.
@@ -721,6 +751,35 @@ public actor StorageActor {
             var results: [ExclusionRule] = []
             try conn.query("SELECT * FROM exclusion_rules ORDER BY created_at") { stmt in
                 results.append(Self.exclusionRuleFromRow(stmt, conn: conn))
+            }
+            return results
+        }) ?? []
+    }
+
+    // MARK: CapturePauses
+
+    /// Fetches capture pauses, optionally filtered to those that started within
+    /// the given half-open interval `[from, to)`. Returns all pauses when both
+    /// bounds are `nil`, ordered most-recent first.
+    public func fetchCapturePauses(from: Date? = nil, to: Date? = nil) -> [CapturePause] {
+        (try? reader.withConnection { conn in
+            var clauses: [String] = []
+            var bindings: [SQLiteValue] = []
+            if let f = from {
+                clauses.append("started_at >= ?")
+                bindings.append(.real(f.timeIntervalSince1970))
+            }
+            if let t = to {
+                clauses.append("started_at < ?")
+                bindings.append(.real(t.timeIntervalSince1970))
+            }
+            let where_ = clauses.isEmpty ? "" : "WHERE " + clauses.joined(separator: " AND ")
+            var results: [CapturePause] = []
+            try conn.query(
+                "SELECT * FROM capture_pauses \(where_) ORDER BY started_at DESC",
+                bindings: bindings
+            ) { stmt in
+                results.append(Self.capturePauseFromRow(stmt, conn: conn))
             }
             return results
         }) ?? []
@@ -1025,6 +1084,15 @@ public actor StorageActor {
             type:      ExclusionRule.RuleType(rawValue: conn.columnText(stmt, at: 1) ?? "") ?? .app,
             value:     conn.columnText(stmt, at: 2) ?? "",
             createdAt: conn.columnDate(stmt, at: 3)
+        )
+    }
+
+    private static func capturePauseFromRow(_ stmt: OpaquePointer, conn: SQLiteConnection) -> CapturePause {
+        CapturePause(
+            id:        conn.columnText(stmt, at: 0) ?? "",
+            startedAt: conn.columnDate(stmt, at: 1),
+            endedAt:   conn.columnDateOptional(stmt, at: 2),
+            reason:    conn.columnText(stmt, at: 3)
         )
     }
 
