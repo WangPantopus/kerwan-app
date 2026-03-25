@@ -1,5 +1,10 @@
 // swift-tools-version: 5.9
 import PackageDescription
+import Foundation
+
+// Integration and performance tests depend on Ollama and slow timers — exclude
+// them from CI (GitHub Actions sets CI=true) to avoid spurious compile failures.
+let isCI = ProcessInfo.processInfo.environment["CI"] == "true"
 
 /// Kerwan — local-first macOS activity capture and billing assistant.
 ///
@@ -181,6 +186,7 @@ let package = Package(
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
+    ] + (isCI ? [] : [
         .testTarget(
             name: "KerwanIntegrationTests",
             dependencies: ["Kerwan", "KerwanXPCProtocol", "KerwanStorage", "KerwanCapture"],
@@ -197,6 +203,7 @@ let package = Package(
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
+    ]) + [
         .testTarget(
             name: "KerwanScoringTests",
             dependencies: ["KerwanScoring", "KerwanStorage"],
