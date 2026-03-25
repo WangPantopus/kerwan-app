@@ -7,6 +7,7 @@ import SwiftUI
 /// Changing the source or client filter triggers an immediate reload.
 /// Date-range changes are staged in the ViewModel and applied when the
 /// user clicks "Apply" — this avoids refetching on every date picker step.
+@MainActor
 struct TimelineFilterBar: View {
 
     @Bindable var viewModel: TimelineViewModel
