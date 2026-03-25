@@ -9,7 +9,10 @@ import Foundation
 /// Settings are loaded into memory at launch by the ``StorageActor`` and
 /// cached in ``AppState``. Writes go through ``StorageActor`` and are
 /// applied immediately.
-public struct UserSettings: Codable, Sendable, Hashable {
+public struct UserSettings: Codable, Sendable, Hashable, Identifiable {
+    /// Singleton identity — there is only ever one UserSettings row.
+    public var id: String { "user_settings" }
+
     /// Whether microphone / system audio capture is enabled.
     public var captureAudio: Bool
 

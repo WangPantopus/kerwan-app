@@ -5,7 +5,18 @@ import Foundation
 /// `CaptureStatus` drives the menu bar indicator and capture controls.
 /// The main ``CaptureManager`` actor publishes status changes that flow
 /// through ``AppState`` to the UI.
-public enum CaptureStatus: Sendable, Hashable {
+public enum CaptureStatus: Sendable, Hashable, Identifiable {
+    /// Stable identity for use in SwiftUI lists and ForEach.
+    public var id: String {
+        switch self {
+        case .idle: return "idle"
+        case .capturing: return "capturing"
+        case .paused: return "paused"
+        case .privateMode: return "privateMode"
+        case .error(let message): return "error:\(message)"
+        }
+    }
+
     /// No capture sources are active. The system is waiting for the user
     /// to enable capture or for a scheduled capture window to begin.
     case idle
@@ -66,7 +77,7 @@ extension CaptureStatus: Codable {
         case .privateMode:
             self = .privateMode
         case .error:
-            let message = try container.decode(String.self, forKey: .message)
+            let message = try container.decodeIfPresent(String.self, forKey: .message) ?? "Unknown error"
             self = .error(message)
         }
     }
