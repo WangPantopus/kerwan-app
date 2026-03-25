@@ -31,11 +31,7 @@ struct ContentView: View {
     private var detailView: some View {
         switch selectedNavItem {
         case .timeline:
-            PlaceholderDetailView(
-                title: "Timeline",
-                description: "Your professional activity timeline will appear here.",
-                systemImage: "clock"
-            )
+            TimelineView()
         case .sessions:
             PlaceholderDetailView(
                 title: "Sessions",

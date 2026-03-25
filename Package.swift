@@ -15,7 +15,7 @@ import PackageDescription
 /// startup. The Migrations file references this via loadSqliteVec().
 let package = Package(
     name: "Kerwan",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     products: [
         // MARK: Executables
         .executable(name: "Kerwan",        targets: ["Kerwan"]),
