@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ExportOptions.plist — Developer ID distribution template
+  ─────────────────────────────────────────────────────────
+  The release workflow generates this file dynamically (via Python + plistlib)
+  to inject APPLE_TEAM_ID from GitHub Secrets.  This committed copy serves as
+  a human-readable reference and can be used for local builds by replacing
+  REPLACE_WITH_TEAM_ID with your 10-character Apple Team ID.
+
+  method values:
+    developer-id   → signed for direct download (Gatekeeper-notarized DMG)
+    app-store      → Mac App Store submission
+-->
+<plist version="1.0">
+<dict>
+  <!-- Distribution method: direct download outside the Mac App Store -->
+  <key>method</key>
+  <string>developer-id</string>
+
+  <!-- Replace with your 10-character Apple Team ID, e.g. ABC1234567 -->
+  <key>teamID</key>
+  <string>REPLACE_WITH_TEAM_ID</string>
+
+  <!-- Let Xcode pick the certificate automatically from the keychain -->
+  <key>signingStyle</key>
+  <string>automatic</string>
+
+  <!-- Strip Swift standard-library debug symbols to reduce binary size -->
+  <key>stripSwiftSymbols</key>
+  <true/>
+
+  <!-- Bitcode is not applicable on Apple Silicon / macOS -->
+  <key>compileBitcode</key>
+  <false/>
+</dict>
+</plist>
