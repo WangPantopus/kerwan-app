@@ -22,7 +22,6 @@ struct ContentView: View {
     )
 
     @Environment(AppState.self) private var appState
-    @Environment(\.openSettings) private var openSettings
 
     // MARK: - Persisted state
 

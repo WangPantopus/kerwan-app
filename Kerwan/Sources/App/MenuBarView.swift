@@ -15,10 +15,12 @@ struct MenuBarView: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
 
     /// The `AppLifecycle` actor used to dispatch capture-control actions.
     let lifecycle: AppLifecycle
+
+    /// The update manager — called when the user taps "Check for Updates…".
+    let updateManager: UpdateManager
 
     var body: some View {
         // MARK: Status line
@@ -65,8 +67,13 @@ struct MenuBarView: View {
         Divider()
 
         // MARK: App
+        Button("Check for Updates…") {
+            updateManager.checkForUpdates()
+            Self.logger.info("Manual update check triggered from menu bar")
+        }
+
         Button("Settings…") {
-            openSettings()
+            NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             Self.logger.info("Settings window opened from menu bar")
         }
         .keyboardShortcut(",", modifiers: .command)

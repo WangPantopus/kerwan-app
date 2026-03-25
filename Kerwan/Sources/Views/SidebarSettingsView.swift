@@ -13,7 +13,6 @@ struct SidebarSettingsView: View {
     )
 
     @Environment(AppState.self) private var appState
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         ScrollView {
@@ -27,7 +26,7 @@ struct SidebarSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Open Full Settings…") {
-                    openSettings()
+                    NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
@@ -85,7 +84,7 @@ struct SidebarSettingsView: View {
 
             VStack(spacing: 8) {
                 Button("Open Full Settings…") {
-                    openSettings()
+                    NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .buttonStyle(.borderless)
