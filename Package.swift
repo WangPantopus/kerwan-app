@@ -75,6 +75,7 @@ let package = Package(
             name: "Kerwan",
             dependencies: [
                 .product(name: "SQLite", package: "SQLite.swift"),
+                "KerwanKeychain",
                 "KerwanXPCProtocol",
                 "SQLCipher",
             ],
