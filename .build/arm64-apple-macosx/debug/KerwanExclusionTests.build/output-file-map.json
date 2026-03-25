@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanExclusionTests.build/master.swiftdeps"
+  },
+  "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/Tests/KerwanExclusionTests/ExclusionEngineTests.swift": {
+    "dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanExclusionTests.build/ExclusionEngineTests.d",
+    "object": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanExclusionTests.build/ExclusionEngineTests.swift.o",
+    "swiftmodule": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanExclusionTests.build/ExclusionEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanExclusionTests.build/ExclusionEngineTests.swiftdeps",
+    "diagnostics": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanExclusionTests.build/ExclusionEngineTests.dia"
+  }
+}

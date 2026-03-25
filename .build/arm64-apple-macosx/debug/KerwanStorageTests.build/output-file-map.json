@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanStorageTests.build/master.swiftdeps"
+  },
+  "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/Tests/KerwanStorageTests/StorageActorTests.swift": {
+    "dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanStorageTests.build/StorageActorTests.d",
+    "object": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanStorageTests.build/StorageActorTests.swift.o",
+    "swiftmodule": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanStorageTests.build/StorageActorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanStorageTests.build/StorageActorTests.swiftdeps",
+    "diagnostics": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanStorageTests.build/StorageActorTests.dia"
+  }
+}

@@ -43,22 +43,19 @@ All processing happens on-device. No user data ever leaves the machine.
 
 ```
 kerwan-app/
-├── Kerwan/                     # Main Swift app target
-│   ├── App/                    # App entry point, AppState, lifecycle
-│   ├── Capture/                # CaptureManager, audio, accessibility, email, calendar
-│   ├── AI/                     # OllamaManager, ClassificationActor, EmbeddingService
-│   ├── Storage/                # StorageEngine, StorageActor, schema, migrations
-│   ├── Search/                 # SearchEngine, FTS5, semantic search, ranking
-│   ├── Billing/                # BillingEngine, session clustering, invoice export
-│   ├── Identity/               # Identity resolution, contact merge/split
-│   ├── UI/                     # SwiftUI views and view models
-│   └── Notifications/          # UNUserNotificationCenter, briefings, digest
-├── WhisperService/             # XPC service target — transcription (whisper.cpp)
-├── KerwanNMH/                  # Chrome Native Messaging host binary
-├── ChromeExtension/            # Manifest V3 extension (LinkedIn + Gmail)
-├── Backend/                    # Node.js + TypeScript licensing/billing backend
-├── Shared/                     # Shared types between targets
-└── Tests/                      # Unit and integration tests
+├── Package.swift                # SPM package manifest
+├── Kerwan/
+│   ├── Sources/
+│   │   ├── App/                 # @main App struct, AppState, views
+│   │   ├── Models/              # Domain model types
+│   │   └── XPCProtocol/         # WhisperServiceProtocol, TranscriptSegment (shared)
+│   └── Resources/               # Info.plist, entitlements
+├── WhisperService/
+│   └── Sources/                 # XPC service entry point and handler
+├── Vendor/
+│   └── SQLCipher/               # System library module map for SQLCipher
+├── KerwanTests/                 # Unit tests
+└── KerwanIntegrationTests/      # Integration tests
 ```
 
 ---
@@ -86,6 +83,52 @@ Full architecture and data model are documented in [`kerwan_engineering_design.m
 | `dev` | Active development |
 
 Feature branches cut from `dev`, merged back to `dev` via PR. Promotions: `dev → staging → master`.
+
+---
+
+## Building
+
+### Prerequisites
+
+- macOS 13.0+ (Ventura)
+- Xcode 15.0+ with Swift 5.9
+- SQLCipher (install via Homebrew):
+  ```bash
+  brew install sqlcipher
+  ```
+
+### Build & Run
+
+```bash
+# Resolve dependencies and build
+swift build
+
+# Run unit tests
+swift test --filter KerwanTests
+
+# Run integration tests
+swift test --filter KerwanIntegrationTests
+```
+
+### Xcode
+
+To open in Xcode, generate the project:
+```bash
+open Package.swift
+```
+
+Xcode will resolve SPM dependencies automatically. Select the **Kerwan** scheme and run (⌘R).
+
+### Targets
+
+| Target | Type | Description |
+|---|---|---|
+| `Kerwan` | Executable | Main macOS app (SwiftUI + capture + storage) |
+| `WhisperService` | Executable | XPC service for whisper.cpp transcription |
+| `KerwanXPCProtocol` | Library | Shared protocol and types for XPC communication |
+| `SQLCipher` | System Library | Module map linking against SQLCipher |
+| `KerwanTests` | Test | Unit tests |
+| `KerwanIntegrationTests` | Test | Integration tests |
 
 ---
 

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Sandbox -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- Microphone access for audio capture -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
+    <!-- ScreenCaptureKit access for screen capture -->
+    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+    <array>
+        <string>com.apple.screencapture</string>
+    </array>
+
+    <!-- Calendar read-only access for meeting detection -->
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
+
+    <!-- Network client for Ollama localhost + license validation -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Hardened Runtime: Allow unsigned executable memory (for Ollama/whisper.cpp JIT) -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Accessibility API access for active window detection -->
+    <key>com.apple.security.temporary-exception.apple-events</key>
+    <array>
+        <string>com.apple.systemevents</string>
+    </array>
+</dict>
+</plist>
