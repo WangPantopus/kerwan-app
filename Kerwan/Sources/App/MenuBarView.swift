@@ -57,7 +57,7 @@ struct MenuBarView: View {
         .keyboardShortcut("0", modifiers: .command)
 
         Button("Search…") {
-            openWindow(id: "search")
+            NotificationCenter.default.post(name: .kerwanShowSearch, object: nil)
             Self.logger.info("Global search opened from menu bar")
         }
         .keyboardShortcut("r", modifiers: [.command, .shift])

@@ -19,10 +19,12 @@ import os
 /// KerwanApp
 /// ├── WindowGroup("main")        — timeline / session / client window
 /// ├── WindowGroup("quick-note")  — floating note-entry panel
-/// ├── WindowGroup("search")      — global search overlay
 /// ├── Settings                   — native settings window (⌘,)
 /// └── MenuBarExtra               — status icon + dropdown menu
 /// ```
+/// The global search overlay (⌘⇧R) is a borderless NSWindow owned by
+/// `SearchOverlayController` — outside the SwiftUI scene graph so it can
+/// float above all other applications.
 @main
 struct KerwanApp: App {
     private static let logger = Logger(
@@ -81,17 +83,10 @@ struct KerwanApp: App {
         .defaultSize(width: 440, height: 144)
         .windowStyle(.hiddenTitleBar)
 
-        // MARK: Global Search Window
-        // Opens via "Search…" in the menu bar (⌘⇧R).
-
-        WindowGroup(id: "search") {
-            GlobalSearchView()
-                .environment(appDelegate.appState)
-                .frame(minWidth: 600, minHeight: 420)
-        }
-        .defaultSize(width: 700, height: 480)
-
         // MARK: Settings Window
+        // NOTE: The global search overlay (⌘⇧R) is a borderless NSWindow
+        // managed by SearchOverlayController, not a SwiftUI WindowGroup.
+        // See KerwanAppDelegate.searchController and SearchOverlayController.
         // Standard macOS Settings scene; opened via ⌘, or "Settings…" button.
 
         Settings {

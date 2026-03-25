@@ -3,9 +3,10 @@ import os
 
 /// The native Settings window content (⌘,).
 ///
-/// Hosts tabbed preferences panels. Full implementation is in the settings
-/// workstream; this file defines the tab scaffold and capture-related toggles
-/// which interact directly with `AppState` and the capture controls.
+/// Hosts six tabbed preference panels. Each tab delegates to a dedicated
+/// view in `Kerwan/Sources/Settings/`. All persistent changes are funnelled
+/// through `SettingsViewModel`, which writes to the storage layer via the
+/// `SettingsStorageService` protocol.
 struct KerwanSettingsView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",
@@ -14,118 +15,56 @@ struct KerwanSettingsView: View {
 
     @Environment(AppState.self) private var appState
 
+    /// Shared view model. Injected with a nil storage service until the app
+    /// provides a concrete `StorageActor` adapter; tabs gracefully no-op when
+    /// storage is absent.
+    @State private var vm = SettingsViewModel()
+
     var body: some View {
         TabView {
-            CaptureSettingsTab()
-                .tabItem { Label("Capture", systemImage: "waveform") }
-                .environment(appState)
+            GeneralSettingsTab(vm: vm)
+                .tabItem { Label("General", systemImage: "gear") }
 
-            PrivacySettingsTab()
-                .tabItem { Label("Privacy", systemImage: "hand.raised") }
-                .environment(appState)
+            PermissionsSettingsTab(vm: vm)
+                .tabItem { Label("Permissions", systemImage: "checkmark.shield") }
 
-            BillingSettingsTab()
-                .tabItem { Label("Billing", systemImage: "dollarsign.circle") }
-                .environment(appState)
+            EmailSettingsTab(vm: vm)
+                .tabItem { Label("Email", systemImage: "envelope") }
 
-            ServicesSettingsTab()
-                .tabItem { Label("Services", systemImage: "server.rack") }
-                .environment(appState)
+            ExclusionsSettingsTab(vm: vm)
+                .tabItem { Label("Exclusions", systemImage: "hand.raised") }
+
+            DataSettingsTab(vm: vm)
+                .tabItem { Label("Data", systemImage: "externaldrive") }
+
+            AboutSettingsTab()
+                .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 540, height: 380)
-    }
-}
-
-// MARK: - Capture tab
-
-private struct CaptureSettingsTab: View {
-    @Environment(AppState.self) private var appState
-
-    var body: some View {
-        Form {
-            Section("Audio") {
-                LabeledContent("Status") {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(appState.captureStatus.isActive ? Color.green : Color.secondary)
-                            .frame(width: 8, height: 8)
-                        Text(appState.captureStatus.description)
-                    }
-                }
-                LabeledContent("Transcription Model") {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(appState.isModelLoaded ? Color.green : Color.secondary)
-                            .frame(width: 8, height: 8)
-                        Text(appState.isModelLoaded ? "Loaded" : "Not loaded")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section("Integrations") {
-                LabeledContent("WhisperService XPC") {
-                    ConnectionStatusBadge(connected: appState.isWhisperServiceConnected)
-                }
-                LabeledContent("Ollama") {
-                    ConnectionStatusBadge(connected: appState.isOllamaRunning)
-                }
-            }
+        .frame(width: 560, height: 480)
+        .task {
+            await vm.onAppear()
         }
-        .formStyle(.grouped)
-        .padding()
-    }
-}
-
-// MARK: - Privacy tab
-
-private struct PrivacySettingsTab: View {
-    var body: some View {
-        PlaceholderDetailView(
-            title: "Privacy",
-            description: "Exclusion rules, data retention, and private mode settings.",
-            systemImage: "hand.raised"
-        )
-    }
-}
-
-// MARK: - Billing tab
-
-private struct BillingSettingsTab: View {
-    var body: some View {
-        PlaceholderDetailView(
-            title: "Billing",
-            description: "Default hourly rates, invoice prefixes, and currency preferences.",
-            systemImage: "dollarsign.circle"
-        )
-    }
-}
-
-// MARK: - Services tab
-
-private struct ServicesSettingsTab: View {
-    @Environment(AppState.self) private var appState
-
-    var body: some View {
-        Form {
-            Section("AI Services") {
-                LabeledContent("Ollama") {
-                    ConnectionStatusBadge(connected: appState.isOllamaRunning)
-                }
-                LabeledContent("WhisperService") {
-                    ConnectionStatusBadge(connected: appState.isWhisperServiceConnected)
-                }
-            }
+        // Surface any storage errors to the user as an overlay alert.
+        .alert(
+            "Settings Error",
+            isPresented: Binding(
+                get: { vm.lastError != nil },
+                set: { if !$0 { vm.lastError = nil } }
+            )
+        ) {
+            Button("OK") { vm.lastError = nil }
+        } message: {
+            Text(vm.lastError ?? "")
         }
-        .formStyle(.grouped)
-        .padding()
     }
 }
 
-// MARK: - Shared components
+// MARK: - ConnectionStatusBadge (retained for backwards compat)
 
 /// A small coloured badge showing connection status.
-private struct ConnectionStatusBadge: View {
+/// Used by the retained Capture/Services display inside the main window's
+/// `SidebarSettingsView` and anywhere else that needs a quick status dot.
+struct ConnectionStatusBadge: View {
     let connected: Bool
 
     var body: some View {

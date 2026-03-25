@@ -23,7 +23,6 @@ struct ContentView: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
 
     // MARK: - Persisted state
 
@@ -67,7 +66,7 @@ struct ContentView: View {
         )
         .onSubmit(of: .search) {
             appState.searchQuery = searchText
-            openWindow(id: "search")
+            NotificationCenter.default.post(name: .kerwanShowSearch, object: nil)
         }
         .onChange(of: searchText) { _, text in
             appState.searchQuery = text
@@ -85,6 +84,13 @@ struct ContentView: View {
         .toolbar { toolbarContent }
         // Minimum window dimensions enforced here; defaultSize is set in KerwanApp.
         .frame(minWidth: 900, minHeight: 600)
+        // Handle notification-driven navigation.
+        .onReceive(NotificationCenter.default.publisher(for: .kerwanShowToday)) { _ in
+            selectedItemRaw = SidebarItem.today.rawValue
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .kerwanShowReviewQueue)) { _ in
+            selectedItemRaw = SidebarItem.reviewQueue.rawValue
+        }
         // Hidden keyboard-shortcut buttons (⌘1 – ⌘6) for sidebar sections.
         .background(keyboardShortcutLayer)
         .sheet(isPresented: $isPresentingNewClient) {

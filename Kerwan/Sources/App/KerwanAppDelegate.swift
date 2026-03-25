@@ -28,6 +28,18 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
     /// The service lifecycle coordinator.
     let lifecycle = AppLifecycle()
 
+    /// Global search overlay — ⌘⇧R from anywhere on the Mac.
+    let searchController = SearchOverlayController()
+
+    /// First-launch onboarding window.
+    let onboardingController = OnboardingWindowController()
+
+    /// Schedules and delivers digest notifications via UNUserNotificationCenter.
+    let notificationScheduler = NotificationScheduler()
+
+    /// Generates daily and weekly AI digests on a background timer loop.
+    let digestGenerator = DigestGenerator()
+
     /// Keychain manager for retrieving the database passphrase at startup.
     private let keychain = KeychainManager(service: "com.kerwan.app")
 
@@ -54,19 +66,68 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
             object: nil
         )
 
-        // Kick off the async startup sequence. This is the authoritative
-        // location for service init — using applicationDidFinishLaunching
-        // avoids running startup logic in an ephemeral view .task, which
-        // would re-fire every time a .menu-style MenuBarExtra is opened.
+        // Kick off the async startup sequence only when onboarding is already
+        // done. On first launch, startup is deferred to `onboardingController.onComplete`
+        // so capture doesn't begin before the user finishes setup.
         let appState = appState
         let lifecycle = lifecycle
         let keychain = keychain
-        Task {
-            // Inject concrete storage / capture implementations here as
-            // those workstreams land:
-            //   await lifecycle.inject(storage: ..., capture: ...)
-            await lifecycle.start(appState: appState, keychain: keychain)
+        if OnboardingViewModel.isCompleted {
+            Task {
+                // Inject concrete storage / capture implementations here as
+                // those workstreams land:
+                //   await lifecycle.inject(storage: ..., capture: ...)
+                await lifecycle.start(appState: appState, keychain: keychain)
+            }
         }
+
+        // Start the global search overlay (⌘⇧R from any app).
+        searchController.start(appState: appState)
+
+        // Show onboarding on first launch (no-ops if already completed).
+        // When the user finishes, start capture and open the main window.
+        onboardingController.onComplete = { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.lifecycle.start(appState: self.appState, keychain: self.keychain)
+            }
+            self.openMainWindow()
+        }
+        onboardingController.showIfNeeded()
+
+        // Set up notification infrastructure: register categories, request
+        // permission, and schedule the calendar-based safety-net triggers.
+        notificationScheduler.setup(appDelegate: self)
+        let notificationScheduler = notificationScheduler
+        let digestGenerator = digestGenerator
+        let digestTime = UserSettings.defaults.digestTime  // replaced once storage loads
+        Task {
+            let granted = await notificationScheduler.requestPermission()
+            if granted {
+                await notificationScheduler.scheduleDailyReminder(timeString: digestTime)
+                await notificationScheduler.scheduleWeeklyReminder(timeString: digestTime)
+            }
+            // DigestGenerator starts its background loop. Inject concrete storage
+            // when the KerwanStorage workstream lands:
+            //   await digestGenerator.start(storage: storageActor, ...)
+            // For now the generator holds nil storage and will skip generation
+            // gracefully until injected.
+            _ = digestGenerator  // retain until injection
+        }
+
+        // Observe Today / Review Queue navigation requests from notifications.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleShowToday),
+            name: .kerwanShowToday,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleShowReviewQueue),
+            name: .kerwanShowReviewQueue,
+            object: nil
+        )
 
         Self.logger.info("Application did finish launching")
     }
@@ -105,6 +166,18 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
             openMainWindow()
         }
         return true
+    }
+
+    // MARK: - Navigation from notifications
+
+    @objc private func handleShowToday(_ notification: Notification) {
+        openMainWindow()
+        appState.selectedSidebarItem = .today
+    }
+
+    @objc private func handleShowReviewQueue(_ notification: Notification) {
+        openMainWindow()
+        appState.selectedSidebarItem = .reviewQueue
     }
 
     // MARK: - Sleep / Wake
