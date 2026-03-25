@@ -100,7 +100,8 @@ struct KerwanApp: App {
         // every open) and cannot safely host a one-shot .task.
 
         MenuBarExtra {
-            MenuBarView(lifecycle: appDelegate.lifecycle)
+            MenuBarView(lifecycle: appDelegate.lifecycle,
+                        updateManager: appDelegate.updateManager)
                 .environment(appDelegate.appState)
         } label: {
             MenuBarIconLabel()
