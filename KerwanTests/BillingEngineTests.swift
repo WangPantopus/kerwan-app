@@ -58,7 +58,11 @@ private actor FailingListStorage: BillingEngineStorage {
 
 private actor ThrowingInsertStorage: BillingEngineStorage {
     enum Err: Error { case insertFailed }
-    var classifiedEvents: [ClassifiedEvent] = []
+    private var classifiedEvents: [ClassifiedEvent] = []
+
+    func seedEvents(_ events: [ClassifiedEvent]) {
+        classifiedEvents = events
+    }
 
     func listClassifiedEvents(since: Date) async throws -> [ClassifiedEvent] {
         classifiedEvents
@@ -203,7 +207,7 @@ final class BillingEngineTests: XCTestCase {
 
     func test_billing_runDailyClustering_insertThrows_doesNotPropagate() async throws {
         let storage = ThrowingInsertStorage()
-        storage.classifiedEvents = [makeClassifiedEvent()]
+        await storage.seedEvents([makeClassifiedEvent()])
         let engine = BillingEngine(client: client, storage: storage)
 
         // Must NOT throw even though insertWorkSession always throws.
@@ -306,7 +310,7 @@ final class BillingEngineTests: XCTestCase {
     // MARK: - runNarrativeGeneration: multiple sessions, one fails, others succeed
 
     func test_billing_runNarrativeGeneration_partialFailure_othersStillUpdated() async throws {
-        var callCount = 0
+        nonisolated(unsafe) var callCount = 0
         MockOllamaURLProtocol.register(path: "api/generate") { _ in
             callCount += 1
             if callCount == 1 {

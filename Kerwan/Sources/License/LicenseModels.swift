@@ -70,7 +70,7 @@ struct LicenseCacheEntry: Codable, Sendable {
 // MARK: - Network request / response
 
 /// Request body for `POST /api/license/validate`.
-struct LicenseValidationRequest: Encodable, Sendable {
+struct LicenseValidationRequest: Codable, Sendable {
 
     /// The license key to validate.
     let licenseKey: String
@@ -90,7 +90,7 @@ struct LicenseValidationRequest: Encodable, Sendable {
 }
 
 /// Response body from `POST /api/license/validate`.
-struct LicenseValidationResponse: Decodable, Sendable {
+struct LicenseValidationResponse: Codable, Sendable {
 
     /// Whether the supplied key is valid for this machine.
     let valid: Bool

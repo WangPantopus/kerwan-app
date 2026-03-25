@@ -285,7 +285,7 @@ final class EmbeddingServiceTests: XCTestCase {
     // MARK: embedQuery
 
     func test_embedQuery_prependsQueryPrefix() async throws {
-        var capturedPrompt = ""
+        nonisolated(unsafe) var capturedPrompt = ""
         MockOllamaURLProtocol.register(path: "api/embeddings") { request in
             if let body = try? JSONSerialization.jsonObject(
                 with: request.httpBody ?? Data()

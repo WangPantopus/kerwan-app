@@ -617,7 +617,7 @@ final class ClassificationActorTests: XCTestCase {
             (200, Data(#"{"models":[]}"#.utf8))
         }
 
-        var callCount = 0
+        nonisolated(unsafe) var callCount = 0
         MockOllamaURLProtocol.register(path: "api/generate") { _ in
             callCount += 1
             if callCount == 1 {
@@ -690,7 +690,7 @@ final class ClassificationActorTests: XCTestCase {
             (200, Data(#"{"embedding":[0.1]}"#.utf8))
         }
 
-        var receivedMetrics: ClassificationMetrics?
+        nonisolated(unsafe) var receivedMetrics: ClassificationMetrics?
         let session = MockOllamaURLProtocol.makeSession()
         actor = ClassificationActor(
             client: OllamaClient(session: session),
@@ -716,7 +716,7 @@ final class ClassificationActorTests: XCTestCase {
             (200, ollamaStreamResponse("not json at all"))
         }
 
-        var receivedMetrics: ClassificationMetrics?
+        nonisolated(unsafe) var receivedMetrics: ClassificationMetrics?
         let session = MockOllamaURLProtocol.makeSession()
         actor = ClassificationActor(
             client: OllamaClient(session: session),
