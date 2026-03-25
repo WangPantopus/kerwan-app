@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+
+    <key>CFBundleExecutable</key>
+    <string>Kerwan</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>com.kerwan.app</string>
+
+    <key>CFBundleName</key>
+    <string>Kerwan</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Kerwan</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+
+    <!-- Privacy Usage Descriptions -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Kerwan uses the microphone to passively capture meeting audio for transcription and session logging. All processing is local — no audio leaves your device.</string>
+
+    <key>NSCalendarsUsageDescription</key>
+    <string>Kerwan reads your calendar to detect meetings and automatically associate captured sessions with calendar events.</string>
+
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Kerwan uses accessibility features to detect the active application for activity classification.</string>
+
+    <!-- LSUIElement: app has a menu bar icon but no Dock icon by default -->
+    <key>LSUIElement</key>
+    <false/>
+</dict>
+</plist>
