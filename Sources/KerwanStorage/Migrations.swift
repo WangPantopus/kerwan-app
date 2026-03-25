@@ -23,6 +23,7 @@ struct MigrationRunner {
 
         let migrations: [(Int, () throws -> Void)] = [
             (1, migration_001),
+            (2, migration_002),
         ]
 
         for (version, migration) in migrations where version > current {
@@ -78,6 +79,38 @@ struct MigrationRunner {
         // at process startup, before any connection is opened. The vec0 virtual tables below
         // use CREATE VIRTUAL TABLE ... IF NOT EXISTS so unit tests on stock SQLite3 simply
         // fail silently at that step without crashing the migration.
+    }
+
+    // MARK: - migration_002
+
+    /// Adds relationship scoring fields to contacts and a direction column to interactions.
+    ///
+    /// - `contacts.relationship_score`: 0–10 float, updated nightly by `RelationshipScoreEngine`.
+    /// - `contacts.last_seen_at`:       Unix timestamp of the most recent interaction; denormalised
+    ///   for fast "active contacts in last N days" queries without a join.
+    /// - `interactions.direction`:      'outbound' (user-initiated), 'inbound' (contact-initiated),
+    ///   or 'mutual' (e.g. meeting). Defaults to 'mutual' for all pre-existing rows.
+    private func migration_002() throws {
+        try conn.execute(
+            "ALTER TABLE contacts ADD COLUMN relationship_score REAL NOT NULL DEFAULT 0.0"
+        )
+        try conn.execute(
+            "ALTER TABLE contacts ADD COLUMN last_seen_at REAL NOT NULL DEFAULT 0.0"
+        )
+        try conn.execute(
+            "ALTER TABLE interactions ADD COLUMN direction TEXT NOT NULL DEFAULT 'mutual'"
+        )
+
+        // Indexes that accelerate the nightly scoring pass and UI sort-by-score queries.
+        try conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contacts_score     ON contacts(relationship_score DESC)"
+        )
+        try conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contacts_last_seen ON contacts(last_seen_at)"
+        )
+        try conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_int_direction      ON interactions(direction)"
+        )
     }
 
     // MARK: - migration_001

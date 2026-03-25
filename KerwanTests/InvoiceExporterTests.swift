@@ -175,8 +175,8 @@ final class InvoiceExporterTests: XCTestCase {
         let data = try Data(contentsOf: url)
         let text = String(data: data, encoding: .utf8) ?? ""
 
-        // BOM
-        XCTAssertTrue(text.hasPrefix("\u{FEFF}"), "CSV should start with UTF-8 BOM")
+        // BOM (check raw bytes since String(data:encoding:) may strip the BOM character)
+        XCTAssertTrue(data.prefix(3).elementsEqual([0xEF, 0xBB, 0xBF]), "CSV should start with UTF-8 BOM")
 
         // Header row
         let header = "Date,Client,Project,Description,Hours,Rate,Amount"

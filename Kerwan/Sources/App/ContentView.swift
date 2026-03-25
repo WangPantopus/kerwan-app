@@ -94,8 +94,11 @@ struct ContentView: View {
         // Hidden keyboard-shortcut buttons (⌘1 – ⌘6) for sidebar sections.
         .background(keyboardShortcutLayer)
         .sheet(isPresented: $isPresentingNewClient) {
-            NewClientSheet(isPresented: $isPresentingNewClient)
-                .environment(appState)
+            NewClientSheet { name, domain, notes in
+                // TODO: persist via StorageActor
+                isPresentingNewClient = false
+            }
+            .environment(appState)
         }
     }
 
@@ -298,42 +301,6 @@ private struct CaptureStatusToolbarDot: View {
         case .idle:        return Color(nsColor: .tertiaryLabelColor)
         case .error:       return .orange
         }
-    }
-}
-
-// MARK: - NewClientSheet
-
-/// Minimal sheet for creating a new client record.
-/// Full implementation will be provided by the Clients workstream.
-private struct NewClientSheet: View {
-    @Binding var isPresented: Bool
-    @Environment(AppState.self) private var appState
-    @State private var clientName: String = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("New Client")
-                .font(.headline)
-
-            TextField("Client name", text: $clientName)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 280)
-
-            HStack {
-                Spacer()
-                Button("Cancel") { isPresented = false }
-                    .keyboardShortcut(.cancelAction)
-                Button("Create") {
-                    // Full implementation: persist via StorageActor.
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(clientName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(20)
-        .fixedSize()
     }
 }
 

@@ -17,7 +17,7 @@ public actor StorageActor {
 
     private let writeConn: SQLiteConnection
     private let reader: ReadConnectionBox
-    private let dbPath: String
+    let dbPath: String
     private let log = Logger(subsystem: "com.kerwan.app", category: "StorageActor")
 
     // MARK: - Init
@@ -132,27 +132,36 @@ public actor StorageActor {
     // MARK: Interactions
 
     /// Inserts a new Interaction and links it to the given raw event IDs.
+    /// Inserts a new Interaction and links it to the given raw event IDs.
     public func insertInteraction(_ interaction: Interaction, linkedEventIds: [String]) throws {
         try writeConn.transaction {
-            try writeConn.execute("""
+            let sql = """
                 INSERT INTO interactions
                     (id, contact_id, client_id, project_id, type,
                      subject, body, summary, sentiment, started_at,
-                     ended_at, source, metadata)
-                VALUES ('\(interaction.id)',
-                        \(sqlText(interaction.contactId)),
-                        \(sqlText(interaction.clientId)),
-                        \(sqlText(interaction.projectId)),
-                        '\(interaction.type.rawValue)',
-                        \(sqlText(interaction.subject)),
-                        \(sqlText(interaction.body)),
-                        \(sqlText(interaction.summary)),
-                        '\(interaction.sentiment.rawValue)',
-                        \(interaction.startedAt.timeIntervalSince1970),
-                        \(sqlReal(interaction.endedAt)),
-                        '\(escapeSQL(interaction.source))',
-                        \(sqlText(interaction.metadata)))
-                """)
+                     ended_at, source, metadata, direction)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """
+            let stmt = try writeConn.prepare(sql)
+            defer { sqlite3_finalize(stmt) }
+            try writeConn.bind([
+                .text(interaction.id),
+                .from(interaction.contactId),
+                .from(interaction.clientId),
+                .from(interaction.projectId),
+                .text(interaction.type.rawValue),
+                .from(interaction.subject),
+                .from(interaction.body),
+                .from(interaction.summary),
+                .text(interaction.sentiment.rawValue),
+                .from(interaction.startedAt),
+                .from(interaction.endedAt),
+                .text(interaction.source),
+                .from(interaction.metadata),
+                .text(interaction.direction.rawValue),
+            ], to: stmt)
+            try writeConn.step(stmt)
+
             for eventId in linkedEventIds {
                 try writeConn.execute("""
                     INSERT OR IGNORE INTO interaction_events(interaction_id, event_id)
@@ -234,18 +243,26 @@ public actor StorageActor {
     // MARK: Contacts
 
     /// Inserts or updates a contact matched by email_primary.
+    /// Inserts or updates a contact matched by email_primary.
+    ///
+    /// - `relationship_score` is intentionally excluded from the ON CONFLICT clause;
+    ///   it is owned by `RelationshipScoreEngine` and must not be clobbered on a
+    ///   routine contact upsert.
+    /// - `last_seen_at` advances monotonically: `MAX(last_seen_at, excluded.last_seen_at)`
+    ///   ensures we never roll back a contact's last-seen timestamp.
     public func upsertContact(_ contact: Contact) throws {
         let sql = """
             INSERT INTO contacts
                 (id, display_name, email_primary, company, job_title,
-                 notes, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?)
+                 notes, created_at, updated_at, last_seen_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
             ON CONFLICT(email_primary) DO UPDATE SET
                 display_name = excluded.display_name,
                 company      = excluded.company,
                 job_title    = excluded.job_title,
                 notes        = excluded.notes,
-                updated_at   = excluded.updated_at
+                updated_at   = excluded.updated_at,
+                last_seen_at = MAX(last_seen_at, excluded.last_seen_at)
             """
         let stmt = try writeConn.prepare(sql)
         defer { sqlite3_finalize(stmt) }
@@ -258,6 +275,7 @@ public actor StorageActor {
             .from(contact.notes),
             .from(contact.createdAt),
             .from(contact.updatedAt),
+            .from(contact.lastSeenAt),
         ], to: stmt)
         try writeConn.step(stmt)
     }
@@ -1001,15 +1019,23 @@ public actor StorageActor {
     // ====================================================================
 
     private static func contactFromRow(_ stmt: OpaquePointer, conn: SQLiteConnection) -> Contact {
-        Contact(
-            id:           conn.columnText(stmt, at: 0) ?? "",
-            displayName:  conn.columnText(stmt, at: 1) ?? "",
-            emailPrimary: conn.columnText(stmt, at: 2) ?? "",
-            company:      conn.columnText(stmt, at: 3),
-            jobTitle:     conn.columnText(stmt, at: 4),
-            notes:        conn.columnText(stmt, at: 5),
-            createdAt:    conn.columnDate(stmt, at: 6),
-            updatedAt:    conn.columnDate(stmt, at: 7)
+        // Columns 8 and 9 were added in migration_002; columnDouble/columnDate return 0
+        // for NULL (pre-migration rows are given DEFAULT 0), which maps to distantPast.
+        let rawLastSeen = conn.columnDouble(stmt, at: 9)
+        let lastSeenAt: Date = rawLastSeen > 0
+            ? Date(timeIntervalSince1970: rawLastSeen)
+            : .distantPast
+        return Contact(
+            id:                conn.columnText(stmt, at: 0) ?? "",
+            displayName:       conn.columnText(stmt, at: 1) ?? "",
+            emailPrimary:      conn.columnText(stmt, at: 2) ?? "",
+            company:           conn.columnText(stmt, at: 3),
+            jobTitle:          conn.columnText(stmt, at: 4),
+            notes:             conn.columnText(stmt, at: 5),
+            createdAt:         conn.columnDate(stmt, at: 6),
+            updatedAt:         conn.columnDate(stmt, at: 7),
+            relationshipScore: conn.columnDouble(stmt, at: 8),
+            lastSeenAt:        lastSeenAt
         )
     }
 
@@ -1067,6 +1093,7 @@ public actor StorageActor {
     }
 
     private static func interactionFromRow(_ stmt: OpaquePointer, conn: SQLiteConnection) -> Interaction {
+        // Column 13 (direction) was added in migration_002; rows without it default to 'mutual'.
         Interaction(
             id:        conn.columnText(stmt, at: 0) ?? "",
             contactId: conn.columnText(stmt, at: 1),
@@ -1080,7 +1107,8 @@ public actor StorageActor {
             startedAt: conn.columnDate(stmt, at: 9),
             endedAt:   conn.columnDateOptional(stmt, at: 10),
             source:    conn.columnText(stmt, at: 11) ?? "",
-            metadata:  conn.columnText(stmt, at: 12)
+            metadata:  conn.columnText(stmt, at: 12),
+            direction: Interaction.Direction(rawValue: conn.columnText(stmt, at: 13) ?? "") ?? .mutual
         )
     }
 
@@ -1130,6 +1158,51 @@ public actor StorageActor {
             endedAt:   conn.columnDateOptional(stmt, at: 2),
             reason:    conn.columnText(stmt, at: 3)
         )
+    }
+
+    // ====================================================================
+    // MARK: - Internal connection accessors for module-internal extensions
+    // ====================================================================
+
+    /// Calls `block` with the raw `sqlite3*` handle from the write connection.
+    ///
+    /// Used by `StorageActor+Backup.swift` to invoke the SQLite Online Backup API,
+    /// which requires the raw pointer. The block is called synchronously within
+    /// actor isolation; the pointer must not escape the block.
+    func withDatabaseHandle<T: Sendable>(
+        _ block: (OpaquePointer) throws -> T
+    ) throws -> T {
+        guard let handle = writeConn.db else {
+            throw StorageError.databaseNotFound
+        }
+        return try block(handle)
+    }
+
+    /// Issues `PRAGMA wal_checkpoint(TRUNCATE)` on the write connection.
+    ///
+    /// Used before a restore to ensure all committed WAL frames are folded into the
+    /// main database file, giving a clean base for the file-level replacement.
+    func checkpointWAL() throws {
+        try writeConn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    }
+
+    /// Executes `block` with the actor-isolated write connection.
+    ///
+    /// Used by `StorageActor+Scoring.swift` and other module-internal extensions that
+    /// need direct SQL access without coupling to the private `writeConn` property.
+    func withWriteConnection<T: Sendable>(
+        _ block: @Sendable (SQLiteConnection) throws -> T
+    ) throws -> T {
+        try block(writeConn)
+    }
+
+    /// Executes `block` on the thread-safe read connection box.
+    ///
+    /// Used by `StorageActor+Scoring.swift` and other module-internal extensions.
+    func withReadConnection<T: Sendable>(
+        _ block: @Sendable (SQLiteConnection) throws -> T
+    ) throws -> T {
+        try reader.withConnection(block)
     }
 
     // ====================================================================

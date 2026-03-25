@@ -81,7 +81,7 @@ struct GlobalSearchView: View {
         ContentUnavailableView(
             "No Results",
             systemImage: "magnifyingglass",
-            description: Text("No matches found for "\(localQuery)".")
+            description: Text("No matches found for \u{201C}\(localQuery)\u{201D}.")
         )
     }
 
@@ -127,24 +127,4 @@ private struct SearchResultRow: View {
     }
 }
 
-// MARK: - SearchResultType extensions
-
-private extension SearchResultType {
-    var systemImage: String {
-        switch self {
-        case .interaction: return "bubble.left.and.bubble.right"
-        case .contact:     return "person.circle"
-        case .promise:     return "checkmark.seal"
-        case .workSession: return "clock.badge.checkmark"
-        }
-    }
-
-    var tintColor: Color {
-        switch self {
-        case .interaction: return .blue
-        case .contact:     return .purple
-        case .promise:     return .orange
-        case .workSession: return .green
-        }
-    }
-}
+// SearchResultType display helpers are defined in SearchOverlayView.swift.

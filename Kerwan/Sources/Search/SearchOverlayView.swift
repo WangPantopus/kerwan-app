@@ -178,7 +178,7 @@ struct SearchOverlayView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(.tertiary)
-            Text("No results for "\(state.query)"")
+            Text("No results for \u{201C}\(state.query)\u{201D}")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -218,7 +218,7 @@ struct SearchOverlayView: View {
         appState.searchQuery = query
         appState.isSearching = true
 
-        Self.logger.debug("Search dispatched: "\(query, privacy: .public)"")
+        Self.logger.debug("Search dispatched: \u{201C}\(query, privacy: .public)\u{201D}")
     }
 }
 

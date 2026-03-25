@@ -15,7 +15,7 @@ import PackageDescription
 /// startup. The Migrations file references this via loadSqliteVec().
 let package = Package(
     name: "Kerwan",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     products: [
         // MARK: Executables
         .executable(name: "Kerwan",        targets: ["Kerwan"]),
@@ -27,6 +27,9 @@ let package = Package(
         .library(name: "KerwanKeychain",  targets: ["KerwanKeychain"]),
         .library(name: "KerwanExclusion", targets: ["KerwanExclusion"]),
         .library(name: "KerwanCapture",   targets: ["KerwanCapture"]),
+
+        // MARK: Utilities & Polish (Workstream 5)
+        .library(name: "KerwanScoring",   targets: ["KerwanScoring"]),
     ],
     dependencies: [
         .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.3"),
@@ -64,6 +67,14 @@ let package = Package(
             name: "KerwanCapture",
             dependencies: ["KerwanStorage"],
             path: "Sources/KerwanCapture",
+            swiftSettings: [
+                .unsafeFlags(["-strict-concurrency=complete"])
+            ]
+        ),
+        .target(
+            name: "KerwanScoring",
+            dependencies: ["KerwanStorage"],
+            path: "Sources/KerwanScoring",
             swiftSettings: [
                 .unsafeFlags(["-strict-concurrency=complete"])
             ]
@@ -184,6 +195,14 @@ let package = Package(
             path: "KerwanPerformanceTests",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
+            ]
+        ),
+        .testTarget(
+            name: "KerwanScoringTests",
+            dependencies: ["KerwanScoring", "KerwanStorage"],
+            path: "Tests/KerwanScoringTests",
+            swiftSettings: [
+                .unsafeFlags(["-strict-concurrency=complete"])
             ]
         ),
     ]

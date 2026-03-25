@@ -59,6 +59,10 @@ actor MockClassificationStorage: ClassificationStorage {
     func storeInteractionEmbedding(interactionId: EntityID, vector: [Float]) async throws {
         storedEmbeddings.append((id: interactionId, vector: vector))
     }
+
+    func seedClient(_ client: Client) {
+        clients.append(client)
+    }
 }
 
 // MARK: - Helpers
@@ -137,7 +141,7 @@ final class ClassificationJSONParserTests: XCTestCase {
         XCTAssertEqual(results?[0].promises.count, 1)
         XCTAssertEqual(results?[0].promises[0].description, "Send contract by Friday")
         XCTAssertEqual(results?[0].promises[0].who, "other")
-        XCTAssertEqual(results?[0].importance, 0.9, accuracy: 1e-6)
+        XCTAssertEqual(results?[0].importance ?? 0, 0.9, accuracy: 1e-6)
         XCTAssertEqual(results?[0].sentiment, "positive")
         XCTAssertEqual(results?[0].billable, "yes")
     }
@@ -385,12 +389,12 @@ final class ClassificationBatchAssemblerTests: XCTestCase {
     func testAssembly_groupsEventsBySourceType() {
         let audio  = makeEvent(id: "a1", source: .audio,    rawText: "Meeting transcript")
         let email  = makeEvent(id: "e1", source: .email,    rawText: "Email body")
-        let focus  = makeEvent(id: "f1", source: .appFocus, rawText: nil, sourceApp: "Figma",
+        let focus  = makeEvent(id: "f1", source: .appFocus, sourceApp: "Figma", rawText: nil,
                                durationSecs: 300)
         let batches = ClassificationPromptBuilder.assembleBatches(from: [audio, email, focus])
         // Each source type should be in its own batch.
-        let audioSources = batches.flatMap { $0.sourceEvents }.filter { $0.source == .audio }
-        let emailSources = batches.flatMap { $0.sourceEvents }.filter { $0.source == .email }
+        let audioSources = batches.flatMap { $0.sourceEvents }.filter { $0.source == EventSource.audio }
+        let emailSources = batches.flatMap { $0.sourceEvents }.filter { $0.source == EventSource.email }
         XCTAssertEqual(audioSources.count, 1)
         XCTAssertEqual(emailSources.count, 1)
     }
@@ -596,7 +600,7 @@ final class ClassificationActorTests: XCTestCase {
 
         // Seed an existing client with matching domain.
         let client = Client(id: "client-bc", name: "Big Corp", domain: "bigcorp.com")
-        await storage.clients.append(client)
+        await storage.seedClient(client)
 
         actor = makeActor()
         await actor.enqueue([makeEvent(id: "e1", rawText: "Status update.")])
@@ -729,7 +733,7 @@ final class ClassificationActorTests: XCTestCase {
 
     func testShutdown_doesNotCrash() async {
         actor = makeActor()
-        actor.start()
+        await actor.start()
         await actor.shutdown()
         // No assertion — just confirming no crash or hang.
     }

@@ -361,7 +361,8 @@ final class EmbeddingServiceTests: XCTestCase {
             Interaction(id: "x", source: .email, interactionType: .emailReceived, summary: ""),
         ])
 
-        XCTAssertEqual(await storage.interactionEmbeddingCount(), 0)
+        let count = await storage.interactionEmbeddingCount()
+        XCTAssertEqual(count, 0)
     }
 
     func test_embedInteractions_prependsDocumentPrefix() async throws {
@@ -369,6 +370,9 @@ final class EmbeddingServiceTests: XCTestCase {
         final class Capture: @unchecked Sendable { var texts: [String] = [] }
         let capture = Capture()
 
+        MockOllamaURLProtocol.register(path: "api/tags") { _ in
+            (200, Data(#"{"models":[]}"#.utf8))
+        }
         MockOllamaURLProtocol.register(path: "api/embed") { request in
             if let body = try? JSONSerialization.jsonObject(
                 with: request.httpBody ?? Data()
@@ -396,15 +400,16 @@ final class EmbeddingServiceTests: XCTestCase {
         final class Capture: @unchecked Sendable { var batchSizes: [Int] = [] }
         let capture = Capture()
 
+        MockOllamaURLProtocol.register(path: "api/tags") { _ in
+            (200, Data(#"{"models":[]}"#.utf8))
+        }
         MockOllamaURLProtocol.register(path: "api/embed") { request in
-            if let body = try? JSONSerialization.jsonObject(
+            let bodyAny = (try? JSONSerialization.jsonObject(
                 with: request.httpBody ?? Data()
-            ) as? [String: Any],
-               let texts = body["input"] as? [String] {
-                capture.batchSizes.append(texts.count)
-            }
-            let n = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])?["input"] as? [String]
-            return (200, makeEmbedBatchResponse(count: n?.count ?? 0))
+            ) as? [String: Any]) ?? [:]
+            let count = (bodyAny["input"] as? [String])?.count ?? 0
+            capture.batchSizes.append(count)
+            return (200, makeEmbedBatchResponse(count: count))
         }
 
         let storage = MockEmbeddingStorage()
@@ -480,7 +485,8 @@ final class EmbeddingServiceTests: XCTestCase {
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
         await service.runIncrementalCycle()
 
-        XCTAssertEqual(await storage.interactionEmbeddingCount(), 2)
+        let count = await storage.interactionEmbeddingCount()
+        XCTAssertEqual(count, 2)
     }
 
     func test_incrementalCycle_skipsWhenOllamaUnavailable() async throws {
@@ -502,7 +508,8 @@ final class EmbeddingServiceTests: XCTestCase {
         await service.runIncrementalCycle()
 
         XCTAssertFalse(capture.called, "Embed should not be called when Ollama is down")
-        XCTAssertEqual(await storage.interactionEmbeddingCount(), 0)
+        let count = await storage.interactionEmbeddingCount()
+        XCTAssertEqual(count, 0)
     }
 
     // MARK: Incremental cycle — promises
@@ -518,7 +525,8 @@ final class EmbeddingServiceTests: XCTestCase {
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
         await service.runIncrementalCycle()
 
-        XCTAssertEqual(await storage.promiseEmbeddingCount(), 2)
+        let promiseCount = await storage.promiseEmbeddingCount()
+        XCTAssertEqual(promiseCount, 2)
         let ids = await storage.promiseEmbeddings.map(\.id)
         XCTAssertTrue(ids.contains("p1"))
         XCTAssertTrue(ids.contains("p2"))
@@ -537,7 +545,8 @@ final class EmbeddingServiceTests: XCTestCase {
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
         await service.runIncrementalCycle()
 
-        XCTAssertEqual(await storage.rawEventEmbeddingCount(), 1)
+        let rawCount1 = await storage.rawEventEmbeddingCount()
+        XCTAssertEqual(rawCount1, 1)
         let entry = await storage.rawEventEmbeddings.first
         XCTAssertEqual(entry?.id, "note1")
         XCTAssertEqual(entry?.chunk, 0)
@@ -556,8 +565,10 @@ final class EmbeddingServiceTests: XCTestCase {
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
         await service.runIncrementalCycle()
 
-        XCTAssertEqual(await storage.rawEventEmbeddingCount(), 1)
-        XCTAssertEqual(await storage.rawEventEmbeddings.first?.id, "email1")
+        let rawCount2 = await storage.rawEventEmbeddingCount()
+        XCTAssertEqual(rawCount2, 1)
+        let firstEmailEntry = await storage.rawEventEmbeddings.first?.id
+        XCTAssertEqual(firstEmailEntry, "email1")
     }
 
     func test_incrementalCycle_chunksLongAudioTranscript() async throws {
@@ -589,7 +600,8 @@ final class EmbeddingServiceTests: XCTestCase {
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
         await service.runIncrementalCycle()
 
-        XCTAssertEqual(await storage.rawEventEmbeddingCount(), 0)
+        let rawCount3 = await storage.rawEventEmbeddingCount()
+        XCTAssertEqual(rawCount3, 0)
     }
 
     // MARK: Incremental cycle — last cycle timestamp
@@ -599,11 +611,13 @@ final class EmbeddingServiceTests: XCTestCase {
         let storage = MockEmbeddingStorage()
 
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
-        XCTAssertNil(await service.currentMetrics.lastCycleAt)
+        let metricsBefore = await service.currentMetrics
+        XCTAssertNil(metricsBefore.lastCycleAt)
 
         await service.runIncrementalCycle()
 
-        XCTAssertNotNil(await service.currentMetrics.lastCycleAt)
+        let metricsAfter = await service.currentMetrics
+        XCTAssertNotNil(metricsAfter.lastCycleAt)
     }
 
     // MARK: Lifecycle
@@ -627,7 +641,7 @@ final class EmbeddingServiceTests: XCTestCase {
         ])
 
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
-        service.start()
+        await service.start()
 
         try await Task.sleep(for: .milliseconds(50))
         await service.shutdown()
@@ -639,8 +653,8 @@ final class EmbeddingServiceTests: XCTestCase {
         registerEmbedMocks()
         let storage = MockEmbeddingStorage()
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
-        service.start()
-        service.start()   // second call is a no-op
+        await service.start()
+        await service.start()   // second call is a no-op
         await service.shutdown()
     }
 
@@ -648,10 +662,10 @@ final class EmbeddingServiceTests: XCTestCase {
         registerEmbedMocks()
         let storage = MockEmbeddingStorage()
         let service = EmbeddingService(client: makeOllamaClient(), storage: storage)
-        service.start()
+        await service.start()
         await service.shutdown()
         // After shutdown, start() should be a no-op (isStopped = true)
-        service.start()
+        await service.start()
         let m = await service.currentMetrics
         XCTAssertNil(m.lastCycleAt) // no cycle ran
     }

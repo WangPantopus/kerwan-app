@@ -273,7 +273,7 @@ public struct OllamaClient: Sendable {
         try checkHTTPResponse(response, path: "api/pull")
 
         struct PullChunk: Decodable {
-            let status: String
+            let status: String?
             let completed: Int64?
             let total: Int64?
             let error: String?

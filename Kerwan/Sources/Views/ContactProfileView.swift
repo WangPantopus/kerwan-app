@@ -458,7 +458,7 @@ private struct PromiseRow: View {
 
                 HStack(spacing: 8) {
                     if let quote = promise.sourceQuote {
-                        Text(""\(quote)"")
+                        Text("\u{201C}\(quote)\u{201D}")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
