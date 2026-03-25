@@ -271,6 +271,7 @@ private struct RelationshipGaugeView: View {
 
 // MARK: - ContactStatsBar
 
+@MainActor
 private struct ContactStatsBar: View {
     @Bindable var vm: ContactProfileViewModel
 
@@ -955,6 +956,7 @@ private extension View {
 
 // MARK: - Merge Contact Sheet
 
+@MainActor
 private struct MergeContactSheet: View {
     @Bindable var vm: ContactProfileViewModel
     @State private var searchText = ""

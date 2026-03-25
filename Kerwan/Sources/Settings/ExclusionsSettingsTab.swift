@@ -19,6 +19,7 @@ struct ExclusionsSettingsTab: View {
 // MARK: - ExclusionSection
 
 /// One collapsible section per `ExclusionRuleType`.
+@MainActor
 private struct ExclusionSection: View {
     @Bindable var vm: SettingsViewModel
     let ruleType: ExclusionRuleType
