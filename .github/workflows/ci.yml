@@ -14,13 +14,13 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, "release/**"]
+    branches: [main, master, dev, develop, "release/**"]
     paths-ignore:
       - "**.md"
       - "docs/**"
       - ".github/ISSUE_TEMPLATE/**"
   pull_request:
-    branches: [main, develop]
+    branches: [main, master, dev, develop]
     paths-ignore:
       - "**.md"
       - "docs/**"
