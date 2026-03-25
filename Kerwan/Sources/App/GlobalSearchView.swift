@@ -6,6 +6,7 @@ import os
 /// Provides a search bar that dispatches queries to `AppState` and renders
 /// a results list. Full semantic (sqlite-vec) + keyword (FTS5) search is
 /// implemented in the AI intelligence workstream; this view owns the UI shell.
+@MainActor
 struct GlobalSearchView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

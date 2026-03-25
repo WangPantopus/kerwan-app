@@ -273,6 +273,7 @@ struct ContentView: View {
 
 /// A compact status indicator for the main window toolbar.
 /// Shows a colored dot matching the menu bar icon, without any label text.
+@MainActor
 private struct CaptureStatusToolbarDot: View {
     @Environment(AppState.self) private var appState
 

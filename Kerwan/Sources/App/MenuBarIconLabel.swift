@@ -19,6 +19,7 @@ import SwiftUI
 /// When `activeTranscription` is `true` the icon opacity oscillates between
 /// 1.0 and 0.45 on a 0.9-second ease-in-out loop. The animation is started and
 /// stopped via `onChange` so it never runs unnecessarily.
+@MainActor
 struct MenuBarIconLabel: View {
     @Environment(AppState.self) private var appState
 
