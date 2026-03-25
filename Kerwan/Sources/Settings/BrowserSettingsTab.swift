@@ -138,11 +138,12 @@ struct BrowserSettingsTab: View {
 
     // MARK: - Capture toggle
 
-    @MainActor
     private var captureSection: some View {
         Section {
-            @Bindable var appState = appState
-            Toggle("Capture browser context", isOn: $appState.browserCaptureEnabled)
+            Toggle("Capture browser context", isOn: Binding(
+                get: { appState.browserCaptureEnabled },
+                set: { appState.browserCaptureEnabled = $0 }
+            ))
         } header: {
             Text("Capture")
         } footer: {
