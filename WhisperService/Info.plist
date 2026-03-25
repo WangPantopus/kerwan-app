@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist — WhisperService XPC target
+
+  This file configures the XPC service bundle.
+
+  Build-setting notes
+  ───────────────────
+  • PRODUCT_BUNDLE_IDENTIFIER must match NSXPCServiceName exactly.
+  • Set SWIFT_OBJC_BRIDGING_HEADER = WhisperService/whisper-bridging-header.h
+  • Link against libwhisper.a (or whisper.xcframework) and libggml.a.
+  • Add Metal framework for GPU acceleration.
+  • Enable Hardened Runtime; the service needs no entitlements beyond
+    com.apple.security.app-sandbox = YES (inherited from host app).
+
+  Embedding
+  ─────────
+  In the main app target's Build Phases → Embed XPC Services, add
+  "WhisperService.xpc".  Xcode places it at:
+    KerwanApp.app/Contents/XPCServices/com.kerwan.WhisperService.xpc
+-->
+<plist version="1.0">
+<dict>
+
+    <!-- ── Identity ──────────────────────────────────────────────────── -->
+    <key>CFBundleIdentifier</key>
+    <string>com.kerwan.WhisperService</string>
+
+    <key>CFBundleName</key>
+    <string>WhisperService</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Kerwan Whisper Service</string>
+
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+
+    <!-- ── Package type: XPC service ─────────────────────────────────── -->
+    <key>CFBundlePackageType</key>
+    <string>XPC!</string>
+
+    <!-- ── XPC service configuration ────────────────────────────────── -->
+    <key>XPCService</key>
+    <dict>
+        <!-- ServiceType = Application: the service is launched on demand
+             and stays alive as long as there are active connections. -->
+        <key>ServiceType</key>
+        <string>Application</string>
+
+        <!-- RunLoopType = NSRunLoop: use Foundation's run loop (required
+             for NSXPCListener.service()).  Do NOT use "dispatch_main". -->
+        <key>RunLoopType</key>
+        <string>NSRunLoop</string>
+
+        <!-- EnvironmentVariables are forwarded to the XPC process.
+             Useful for disabling Metal in CI / unit-test environments. -->
+        <!--
+        <key>EnvironmentVariables</key>
+        <dict>
+            <key>WHISPER_NO_GPU</key>
+            <string>1</string>
+        </dict>
+        -->
+    </dict>
+
+    <!-- ── Mach service name ─────────────────────────────────────────── -->
+    <!-- Must match the name passed to NSXPCConnection(serviceName:)
+         in WhisperServiceClient.  Use the bundle ID as the service name. -->
+    <key>NSXPCServiceName</key>
+    <string>com.kerwan.WhisperService</string>
+
+    <!-- ── Minimum OS ─────────────────────────────────────────────────── -->
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+
+    <!-- ── Privacy strings (macOS 14+ may surface these) ─────────────── -->
+    <!-- The XPC service records audio supplied by the host app; it does
+         not access the microphone directly.  No additional privacy keys
+         are required for the service bundle itself. -->
+
+    <!-- ── Supported platforms ───────────────────────────────────────── -->
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>MacOSX</string>
+    </array>
+
+    <!-- ── Localizations ─────────────────────────────────────────────── -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+</dict>
+</plist>
