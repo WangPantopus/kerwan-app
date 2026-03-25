@@ -36,14 +36,16 @@ final class CrashRecoveryManagerTests: XCTestCase {
 
         let dbURL = dir.appendingPathComponent("kerwan.db")
 
-        // Create a minimal valid SQLite database via StorageActor (unencrypted).
-        let storage = try StorageActor(passphrase: "", databaseURL: dbURL)
+        // Create a minimal valid SQLite database via StorageActor.
+        // Use a non-empty passphrase — SQLCipher rejects PRAGMA key = '' (empty string).
+        let testPassphrase = "test-recovery-key"
+        let storage = try StorageActor(passphrase: testPassphrase, databaseURL: dbURL)
         _ = storage // just needs to initialise to create the file
 
         CrashRecoveryManager.armDirtyShutdownFlag()
         let result = await CrashRecoveryManager.runPreLaunchChecks(
             databasePath: dbURL.path,
-            passphrase: ""
+            passphrase: testPassphrase
         )
 
         if case .dirtyShutdownRecovered = result {} else {
