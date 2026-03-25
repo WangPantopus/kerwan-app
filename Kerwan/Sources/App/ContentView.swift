@@ -15,6 +15,7 @@ import os
 /// Programmatic navigation from outside this view (e.g. from a menu bar button)
 /// is achieved by writing to `AppState.selectedSidebarItem`; this view observes
 /// that property via `onChange` and syncs it to `@SceneStorage`.
+@MainActor
 struct ContentView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

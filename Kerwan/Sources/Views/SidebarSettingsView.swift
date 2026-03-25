@@ -6,6 +6,7 @@ import os
 /// Shows key service statuses and quick-access toggles inline in the main
 /// window, with a button to open the full settings panel (⌘,). This view is
 /// distinct from `KerwanSettingsView` which is the `Settings` scene content.
+@MainActor
 struct SidebarSettingsView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

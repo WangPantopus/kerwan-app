@@ -7,6 +7,7 @@ import os
 /// a native macOS menu item — no custom chrome needed. The view drives all
 /// quick-access controls: capture toggle, private mode, quick note, and
 /// navigation shortcuts to the main window, global search, and settings.
+@MainActor
 struct MenuBarView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",
