@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanPackageTests.build/master.swiftdeps"
+  },
+  "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanPackageTests.derived/runner.swift": {
+    "dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanPackageTests.build/runner.d",
+    "object": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanPackageTests.build/runner.swiftdeps",
+    "diagnostics": "/Users/yingpengwang/estimate-rescue/kerwan-app/hopeful-lewin/.build/arm64-apple-macosx/debug/KerwanPackageTests.build/runner.dia"
+  }
+}
