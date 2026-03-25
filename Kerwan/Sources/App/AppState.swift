@@ -107,6 +107,11 @@ final class AppState {
 
     // MARK: - Init
 
+    // MARK: - Degradation
+
+    /// Live health status for Whisper, Ollama, IMAP, AX, and Database subsystems.
+    var degradation = GracefulDegradationManager()
+
     init() {
         Self.logger.info("AppState initialized")
     }

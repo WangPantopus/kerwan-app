@@ -97,8 +97,9 @@ enum ClassificationJSONParser {
     /// Items that fail to decode as `ClassificationResult` are logged at `.error` and skipped.
     private static func decodeItemByItem(_ jsonArrayText: String) -> [ClassificationResult] {
         guard let data = jsonArrayText.data(using: .utf8),
-              let rawArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+              let anyArray = try? JSONSerialization.jsonObject(with: data) as? [Any]
         else { return [] }
+        let rawArray = anyArray.compactMap { $0 as? [String: Any] }
 
         var results: [ClassificationResult] = []
         for (index, rawItem) in rawArray.enumerated() {

@@ -43,12 +43,3 @@ final class WhisperServiceDelegate: NSObject, NSXPCListenerDelegate {
     }
 }
 
-// MARK: - Service Main
-
-let delegate = WhisperServiceDelegate()
-let listener = NSXPCListener.service()
-listener.delegate = delegate
-listener.resume()
-
-// Keep the service alive
-RunLoop.current.run()

@@ -58,7 +58,23 @@ final class MockOllamaURLProtocol: URLProtocol, @unchecked Sendable {
             ?? Self.handlers[String(path.split(separator: "/").last ?? Substring(path))]
             ?? { _ in (404, Data(#"{"error":"no handler registered for path: \#(path)"}"#.utf8)) }
 
-        let (statusCode, data) = handler(request)
+        // URLSession moves httpBody to httpBodyStream when routing through URLProtocol.
+        // Reconstruct a request with httpBody populated for handler convenience.
+        var resolvedRequest = request
+        if request.httpBody == nil, let stream = request.httpBodyStream {
+            stream.open()
+            var bodyData = Data()
+            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
+            defer { buffer.deallocate() }
+            while stream.hasBytesAvailable {
+                let n = stream.read(buffer, maxLength: 4096)
+                if n > 0 { bodyData.append(buffer, count: n) }
+            }
+            stream.close()
+            resolvedRequest.httpBody = bodyData
+        }
+
+        let (statusCode, data) = handler(resolvedRequest)
 
         let response = HTTPURLResponse(
             url: request.url!,

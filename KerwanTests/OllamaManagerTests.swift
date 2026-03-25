@@ -122,7 +122,7 @@ final class OllamaManagerTests: XCTestCase {
         MockOllamaURLProtocol.register(path: "api/tags") { _ in
             callCount += 1
             // After pull, return both models.
-            let models: [[String: Any]] = callCount == 1
+            let models: [[String: Any]] = callCount <= 2
                 ? [["name": "nomic-embed-text"]]
                 : [["name": "llama3:8b-instruct-q4_K_M"], ["name": "nomic-embed-text"]]
             let body: [String: Any] = ["models": models]

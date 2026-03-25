@@ -383,7 +383,8 @@ final class SettingsViewModel {
 
     /// Returns whether a string is a valid `NSRegularExpression` pattern.
     func isValidRegex(_ pattern: String) -> Bool {
-        (try? NSRegularExpression(pattern: pattern)) != nil
+        guard !pattern.isEmpty else { return true }
+        return (try? NSRegularExpression(pattern: pattern)) != nil
     }
 
     // MARK: - Data management

@@ -15,6 +15,9 @@ import Foundation
 /// and have not yet been confirmed by the user. The UI surfaces these in a
 /// review queue.
 public struct Contact: Codable, Sendable, Identifiable, Hashable {
+
+    public static func == (lhs: Contact, rhs: Contact) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 

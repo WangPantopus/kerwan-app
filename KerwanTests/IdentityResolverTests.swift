@@ -43,10 +43,13 @@ actor MockIdentityStorage: IdentityResolverStorage {
     }
 
     /// Returns all contacts whose display name contains `name` as a substring
-    /// (case-insensitive), simulating a broad search.
+    /// (case- and diacritic-insensitive), simulating a broad search.
     func findContacts(byNormalisedName name: String) async throws -> [Contact] {
-        contacts.values.filter {
-            $0.displayName.lowercased().contains(name)
+        let normName = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        return contacts.values.filter {
+            $0.displayName
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+                .contains(normName)
         }
     }
 
@@ -116,6 +119,10 @@ actor MockIdentityStorage: IdentityResolverStorage {
 
     func seedInteraction(_ interaction: Interaction) {
         interactions[interaction.id] = interaction
+    }
+
+    func seedClient(_ client: Client) {
+        clients.append(client)
     }
 
     func identityCount() -> Int { identities.count }
@@ -360,7 +367,8 @@ final class IdentityResolverTests: XCTestCase {
             timestamp: Date()
         )
 
-        XCTAssertEqual(await storage.identityCount(), initialCount)
+        let identityCount = await storage.identityCount()
+        XCTAssertEqual(identityCount, initialCount)
     }
 
     // MARK: Step 2 — Domain + name similarity
@@ -370,7 +378,7 @@ final class IdentityResolverTests: XCTestCase {
         let contact = makeContact(name: "Jane Smith", email: "jane.smith@acme.com")
         await storage.seedContact(contact)
         let client = Client(name: "Acme", domain: "acme.com")
-        await storage.clients = [client]
+        await storage.seedClient(client)
 
         let resolver = makeResolver(storage: storage)
         let result = try await resolver.resolve(
@@ -389,7 +397,7 @@ final class IdentityResolverTests: XCTestCase {
     func test_domainName_multipleMatches_needsReview() async throws {
         let storage = MockIdentityStorage()
         let c1 = makeContact(id: "c1", name: "Jane Smith", email: "jane@corp.com")
-        let c2 = makeContact(id: "c2", name: "Jane Smithson", email: "janey@corp.com")
+        let c2 = makeContact(id: "c2", name: "Jane Smithe", email: "janey@corp.com")
         await storage.seedContact(c1)
         await storage.seedContact(c2)
 
@@ -504,7 +512,8 @@ final class IdentityResolverTests: XCTestCase {
         XCTAssertTrue(result.isNew)
         XCTAssertTrue(result.needsReview)
         XCTAssertEqual(result.confidence, 0.5, accuracy: 0.001)
-        XCTAssertEqual(await storage.contactCount(), initialCount + 1)
+        let contactCount = await storage.contactCount()
+        XCTAssertEqual(contactCount, initialCount + 1)
     }
 
     func test_createNew_usesEmailWhenNoName() async throws {
@@ -617,7 +626,8 @@ final class IdentityResolverTests: XCTestCase {
         try await resolver.mergeContacts(sourceId: "src", targetId: "tgt")
 
         // Source contact deleted
-        XCTAssertNil(await storage.contacts["src"])
+        let srcContact = await storage.contacts["src"]
+        XCTAssertNil(srcContact)
         // Interaction reassigned
         let movedInteraction = await storage.interactions.values.first
         XCTAssertEqual(movedInteraction?.contactId, "tgt")
@@ -777,8 +787,10 @@ final class IdentityResolverTests: XCTestCase {
             await resolver.adjustThresholds(basedOnCorrections: corrections)
         }
 
-        XCTAssertLessThanOrEqual(await resolver.domainNameThreshold, 0.99)
-        XCTAssertLessThanOrEqual(await resolver.nameOnlyThreshold, 0.99)
+        let domainNameThreshold = await resolver.domainNameThreshold
+        let nameOnlyThreshold = await resolver.nameOnlyThreshold
+        XCTAssertLessThanOrEqual(domainNameThreshold, 0.99)
+        XCTAssertLessThanOrEqual(nameOnlyThreshold, 0.99)
     }
 
     // MARK: ResolvedIdentity

@@ -12,6 +12,12 @@ public struct Contact: Sendable, Equatable, Identifiable {
     public var notes: String?
     public let createdAt: Date
     public var updatedAt: Date
+    /// Relationship health score from 0 (dormant) to 10 (very active & healthy).
+    /// Computed nightly by `RelationshipScoreEngine` and stored in contacts.relationship_score.
+    public var relationshipScore: Double
+    /// Most-recent interaction timestamp. Denormalised from `interactions.started_at`
+    /// for fast "active contacts in last N days" queries without a join.
+    public var lastSeenAt: Date
 
     public init(
         id: String = UUID().uuidString,
@@ -21,7 +27,9 @@ public struct Contact: Sendable, Equatable, Identifiable {
         jobTitle: String? = nil,
         notes: String? = nil,
         createdAt: Date = .now,
-        updatedAt: Date = .now
+        updatedAt: Date = .now,
+        relationshipScore: Double = 0.0,
+        lastSeenAt: Date = .distantPast
     ) {
         self.id = id
         self.displayName = displayName
@@ -31,6 +39,8 @@ public struct Contact: Sendable, Equatable, Identifiable {
         self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.relationshipScore = max(0.0, min(10.0, relationshipScore))
+        self.lastSeenAt = lastSeenAt
     }
 }
 
@@ -215,6 +225,17 @@ public struct Interaction: Sendable, Equatable, Identifiable {
         case positive, neutral, negative, unknown
     }
 
+    /// Who initiated the interaction — used by the relationship scoring engine
+    /// to compute direction-balance scores.
+    public enum Direction: String, Sendable, CaseIterable, Codable {
+        /// The local user reached out to the contact (e.g. sent email, made a call).
+        case outbound
+        /// The contact reached out to the local user (e.g. received email).
+        case inbound
+        /// Both parties participated equally (e.g. a meeting, Slack DM thread).
+        case mutual
+    }
+
     public let id: String
     public var contactId: String?
     public var clientId: String?
@@ -228,6 +249,9 @@ public struct Interaction: Sendable, Equatable, Identifiable {
     public var endedAt: Date?
     public var source: String
     public var metadata: String?
+    /// Direction of the interaction. Set by the classification pipeline;
+    /// defaults to `.mutual` for interactions pre-dating this column.
+    public var direction: Direction
 
     public init(
         id: String = UUID().uuidString,
@@ -242,7 +266,8 @@ public struct Interaction: Sendable, Equatable, Identifiable {
         startedAt: Date = .now,
         endedAt: Date? = nil,
         source: String,
-        metadata: String? = nil
+        metadata: String? = nil,
+        direction: Direction = .mutual
     ) {
         self.id = id
         self.contactId = contactId
@@ -257,6 +282,7 @@ public struct Interaction: Sendable, Equatable, Identifiable {
         self.endedAt = endedAt
         self.source = source
         self.metadata = metadata
+        self.direction = direction
     }
 }
 

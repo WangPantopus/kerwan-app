@@ -36,6 +36,17 @@ struct KerwanApp: App {
 
     // MARK: - Scene graph
 
+    /// UserDefaults key managed by `CrashRecoveryManager` in `KerwanStorage`.
+    /// Duplicated here so the app target can arm/clear the flag without importing KerwanStorage.
+    private static let dirtyShutdownKey = "com.kerwan.app.dirtyShutdown"
+
+    init() {
+        // Arm the dirty-shutdown flag as early as possible so that if the
+        // process is killed before the window appears we detect it next launch.
+        UserDefaults.standard.set(true, forKey: Self.dirtyShutdownKey)
+        Self.logger.info("Dirty-shutdown flag armed.")
+    }
+
     var body: some Scene {
 
         // MARK: Main Timeline Window
@@ -60,6 +71,16 @@ struct KerwanApp: App {
         .commands {
             // Remove File > New (⌘N) — Kerwan has no document model.
             CommandGroup(replacing: .newItem) {}
+
+            // Clean-quit path: clear the dirty-shutdown flag before the process exits.
+            CommandGroup(replacing: .appTermination) {
+                Button("Quit Kerwan") {
+                    UserDefaults.standard.removeObject(forKey: Self.dirtyShutdownKey)
+                    Self.logger.info("Dirty-shutdown flag cleared on clean quit.")
+                    NSApplication.shared.terminate(nil)
+                }
+                .keyboardShortcut("q")
+            }
 
             // ⌘0 — open / focus the main window from anywhere.
             CommandGroup(after: .windowList) {
