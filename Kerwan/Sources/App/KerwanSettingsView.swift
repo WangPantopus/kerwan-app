@@ -37,6 +37,9 @@ struct KerwanSettingsView: View {
             DataSettingsTab(vm: vm)
                 .tabItem { Label("Data", systemImage: "externaldrive") }
 
+            BrowserSettingsTab()
+                .tabItem { Label("Browser", systemImage: "globe") }
+
             AboutSettingsTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }

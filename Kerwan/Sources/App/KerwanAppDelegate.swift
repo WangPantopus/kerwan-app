@@ -48,6 +48,24 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
     /// Declared `lazy` so it can reference `keychain` after it is initialised.
     private lazy var licenseManager = LicenseManager(keychain: keychain)
 
+    /// Manages Sparkle 2 auto-updates, including automatic background checks
+    /// and the user-facing update sheet. Created early so Sparkle can schedule
+    /// its first background check as soon as the app finishes launching.
+    let updateManager = UpdateManager()
+
+    /// Drives the pre-call briefing pipeline and post-meeting summarisation.
+    ///
+    /// Uses a local `OllamaClient`; storage is injected later via
+    /// `setStorage(_:)` once the storage workstream lands.
+    let briefingScheduler = BriefingScheduler(ollama: OllamaClient())
+
+    /// Manages the floating briefing panel window.
+    let briefingWindowController = BriefingWindowController()
+
+    /// Unix domain socket server that receives context from the Chrome extension.
+    /// Posts `.kerwanBrowserRawEvent` notifications for downstream storage.
+    let nativeMessagingBridge = NativeMessagingBridge()
+
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -135,6 +153,22 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
         }
         onboardingController.showIfNeeded()
 
+        // Start the briefing pipeline — listens for pre-call notifications from
+        // CalendarCaptureService and manages the floating briefing panel.
+        briefingWindowController.start(appDelegate: self)
+        Task { await briefingScheduler.start() }
+
+        // Start the Chrome extension bridge.
+        Task { await nativeMessagingBridge.start() }
+
+        // Observe NMH connection changes and surface them to AppState.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleBrowserConnectionChange),
+            name: .kerwanBrowserExtensionConnectionChanged,
+            object: nil
+        )
+
         // Set up notification infrastructure: register categories, request
         // permission, and schedule the calendar-based safety-net triggers.
         notificationScheduler.setup(appDelegate: self)
@@ -184,6 +218,9 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
         let appState = appState
         let lifecycle = lifecycle
         Task {
+            await briefingScheduler.stop()
+            briefingWindowController.stop()
+            await nativeMessagingBridge.stop()
             await lifecycle.shutdown(appState: appState)
             NSApp.reply(toApplicationShouldTerminate: true)
         }
@@ -254,6 +291,13 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
             object: nil
         )
         Self.logger.info("Main window open requested")
+    }
+
+    // MARK: - Browser extension
+
+    @objc private func handleBrowserConnectionChange(_ notification: Notification) {
+        let connected = notification.userInfo?["connected"] as? Bool ?? false
+        appState.isBrowserExtensionConnected = connected
     }
 
     /// Reverts to accessory policy when the main window is closed, hiding the

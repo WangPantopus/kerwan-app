@@ -96,6 +96,17 @@ final class AppState {
         )
     }
 
+    // MARK: - Browser Extension
+
+    /// Whether the Chrome extension is currently connected via the NMH socket.
+    var isBrowserExtensionConnected: Bool = false
+
+    /// Whether browser context capture (LinkedIn / Gmail) is enabled.
+    /// Mirrors the toggle in `BrowserSettingsTab`; persisted to UserDefaults.
+    var browserCaptureEnabled: Bool = UserDefaults.standard.object(forKey: "browserCaptureEnabled") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(browserCaptureEnabled, forKey: "browserCaptureEnabled") }
+    }
+
     // MARK: - Service Availability
 
     /// Whether the WhisperService XPC connection is established and healthy.
