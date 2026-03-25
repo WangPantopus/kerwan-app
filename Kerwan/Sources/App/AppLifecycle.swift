@@ -22,6 +22,14 @@ protocol AppStorageService: Actor {
 
     /// Persists a user-authored manual note as a `manualNote` source `RawEvent`.
     func insertManualNote(text: String, at date: Date) async throws
+
+    /// Deletes raw events, interactions, and work sessions whose timestamps
+    /// fall outside the most recent `days` days.
+    ///
+    /// Called by ``AppLifecycle`` during the periodic refresh loop whenever the
+    /// active license does not include ``LicenseFeatures/unlimitedHistory``.
+    /// Conforming types should perform the deletion inside a single transaction.
+    func pruneEventsOlderThan(days: Int) async throws
 }
 
 /// The capture-control interface required by the app lifecycle.
@@ -80,6 +88,7 @@ actor AppLifecycle {
 
     private var storage: (any AppStorageService)?
     private var capture: (any CaptureManaging)?
+    private var licenseManager: LicenseManager?
 
     // MARK: - Internal state
 
@@ -95,6 +104,13 @@ actor AppLifecycle {
         self.storage = storage
         self.capture = capture
         Self.logger.info("Services injected into AppLifecycle")
+    }
+
+    /// Injects the license manager used to gate history pruning in the
+    /// refresh loop. Call before ``start(appState:keychain:)``.
+    func setLicenseManager(_ manager: LicenseManager) {
+        self.licenseManager = manager
+        Self.logger.info("LicenseManager injected into AppLifecycle")
     }
 
     // MARK: - Startup
@@ -159,18 +175,42 @@ actor AppLifecycle {
 
     /// Starts the badge-count refresh loop. Fires every 30 seconds.
     ///
-    /// The loop also serves as the trigger point for the billing-engine sweep
-    /// and daily digest scheduling (both stubbed here; implemented in their
-    /// respective workstreams).
+    /// The loop also:
+    /// - Triggers the billing-engine sweep and daily digest scheduling
+    ///   (implemented in their respective workstreams).
+    /// - Prunes events older than 30 days when the license does not include
+    ///   ``LicenseFeatures/unlimitedHistory``.
     private func startRefreshLoop(appState: AppState) {
         refreshTask?.cancel()
         refreshTask = Task {
             while !Task.isCancelled && !isShuttingDown {
                 await refreshCounts(appState: appState)
+                await pruneHistoryIfNeeded()
                 // Billing engine sweep and digest scheduling hooks fire here
                 // when implemented by the AI intelligence workstream.
                 try? await Task.sleep(for: .seconds(30))
             }
+        }
+    }
+
+    /// Prunes raw events, interactions, and sessions older than 30 days when
+    /// the active license does not include unlimited history.
+    ///
+    /// This is a no-op if storage has not been injected or if the license
+    /// grants unlimited history.
+    private func pruneHistoryIfNeeded() async {
+        guard let storage, let licenseManager else { return }
+
+        let features = await licenseManager.currentFeatures
+        guard !features.unlimitedHistory else { return }
+
+        do {
+            try await storage.pruneEventsOlderThan(days: 30)
+            Self.logger.debug("History pruned to 30 days (free-tier limit)")
+        } catch {
+            Self.logger.error(
+                "History pruning failed: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 

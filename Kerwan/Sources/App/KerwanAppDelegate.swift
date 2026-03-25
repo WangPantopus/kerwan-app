@@ -43,6 +43,11 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
     /// Keychain manager for retrieving the database passphrase at startup.
     private let keychain = KeychainManager(service: "com.kerwan.app")
 
+    /// Manages license validation, Keychain cache, and feature gating.
+    ///
+    /// Declared `lazy` so it can reference `keychain` after it is initialised.
+    private lazy var licenseManager = LicenseManager(keychain: keychain)
+
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -72,8 +77,28 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
         let appState = appState
         let lifecycle = lifecycle
         let keychain = keychain
+        let licenseManager = licenseManager
         if OnboardingViewModel.isCompleted {
             Task {
+                // Step 1 — Validate the license first so feature flags are in
+                // place before the capture and AI pipelines start.
+                do {
+                    let features = try await licenseManager.validate()
+                    let isValid  = await licenseManager.isValid
+                    await MainActor.run {
+                        appState.updateLicense(features: features, isValid: isValid)
+                    }
+                } catch {
+                    // Non-fatal: free-tier is already the LicenseManager default.
+                    Self.logger.warning(
+                        "License validation error at launch: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+
+                // Step 2 — Pass the license manager to the lifecycle so it can
+                // gate history pruning in the refresh loop.
+                await lifecycle.setLicenseManager(licenseManager)
+
                 // Inject concrete storage / capture implementations here as
                 // those workstreams land:
                 //   await lifecycle.inject(storage: ..., capture: ...)
@@ -89,7 +114,22 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
         onboardingController.onComplete = { [weak self] in
             guard let self else { return }
             Task {
-                await self.lifecycle.start(appState: self.appState, keychain: self.keychain)
+                // Validate license before starting services (same flow as above).
+                let licenseManager = self.licenseManager
+                let appState       = self.appState
+                do {
+                    let features = try await licenseManager.validate()
+                    let isValid  = await licenseManager.isValid
+                    await MainActor.run {
+                        appState.updateLicense(features: features, isValid: isValid)
+                    }
+                } catch {
+                    Self.logger.warning(
+                        "Post-onboarding license error: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+                await self.lifecycle.setLicenseManager(self.licenseManager)
+                await self.lifecycle.start(appState: appState, keychain: self.keychain)
             }
             self.openMainWindow()
         }

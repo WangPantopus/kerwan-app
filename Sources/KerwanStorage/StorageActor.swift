@@ -400,6 +400,42 @@ public actor StorageActor {
         }
     }
 
+    /// Deletes raw events, interactions, work sessions, and their dependent
+    /// join-table rows that are older than `days` days from now.
+    ///
+    /// Called by `AppLifecycle` on every 30-second refresh cycle when the
+    /// active license does not include unlimited history (free tier: 30 days).
+    /// The deletion runs inside a single WAL transaction so the operation is
+    /// atomic from readers' perspective.
+    ///
+    /// - Parameter days: The number of days of history to retain. Records
+    ///   with timestamps earlier than `Date() - days * 86400` are removed.
+    public func pruneEventsOlderThan(days: Int) throws {
+        let cutoff = Date().timeIntervalSince1970 - Double(days) * 86_400
+        try writeConn.transaction {
+            // Interactions cascade into fts_interactions, vec_interactions,
+            // interaction_events, and promises via ON DELETE CASCADE.
+            try writeConn.execute("""
+                DELETE FROM interactions
+                WHERE started_at < \(cutoff)
+                """)
+            // Work sessions cascade into session_events.
+            try writeConn.execute("""
+                DELETE FROM work_sessions
+                WHERE started_at < \(cutoff)
+                """)
+            // Raw events that are no longer referenced by any session or
+            // interaction (orphans after the cascade above).
+            try writeConn.execute("""
+                DELETE FROM raw_events
+                WHERE timestamp < \(cutoff)
+                  AND id NOT IN (SELECT event_id FROM interaction_events)
+                  AND id NOT IN (SELECT event_id FROM session_events)
+                """)
+        }
+        log.info("Pruned records older than \(days) days (cutoff: \(cutoff))")
+    }
+
     /// Drops and recreates all tables. Equivalent to a factory reset.
     public func deleteAllData() throws {
         try writeConn.transaction {

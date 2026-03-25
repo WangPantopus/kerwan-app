@@ -85,6 +85,11 @@ let package = Package(
             ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
+            ],
+            linkerSettings: [
+                // Required for MachineIdentifier: reads the hardware UUID via
+                // IOPlatformExpertDevice / IORegistryEntryCreateCFProperty.
+                .linkedFramework("IOKit"),
             ]
         ),
 

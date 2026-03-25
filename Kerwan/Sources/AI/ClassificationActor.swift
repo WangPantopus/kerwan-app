@@ -52,6 +52,12 @@ public actor ClassificationActor {
     private let cycleInterval: Duration
     private let onMetricsUpdate: @Sendable (ClassificationMetrics) -> Void
 
+    /// Optional license provider. When set, each classification cycle checks
+    /// ``LicenseFeatures/llm`` before calling Ollama. When `nil` (default),
+    /// the check is skipped and the pipeline runs unconditionally — useful in
+    /// tests and during pre-license development builds.
+    private var licenseProvider: (any LicenseFeatureProvider)?
+
     // MARK: - Init
 
     /// Creates a `ClassificationActor`.
@@ -90,6 +96,20 @@ public actor ClassificationActor {
                 await runClassificationCycle()
             }
         }
+    }
+
+    /// Injects the license provider used to gate the LLM classification pipeline.
+    ///
+    /// Call this once after construction — typically from `KerwanAppDelegate`
+    /// or `AppLifecycle` — before calling ``start()``. Subsequent calls replace
+    /// the previous provider.
+    ///
+    /// When the provider reports `currentFeatures.llm == false`, each drain
+    /// cycle exits immediately without contacting Ollama, and events remain in
+    /// the pending queue for when the license is upgraded.
+    func setLicenseProvider(_ provider: any LicenseFeatureProvider) {
+        licenseProvider = provider
+        Self.logger.info("LicenseFeatureProvider set on ClassificationActor")
     }
 
     /// Cancels the drain cycle and waits for any in-flight classification to finish.
@@ -131,6 +151,17 @@ public actor ClassificationActor {
     /// Internal visibility allows direct invocation from tests without waiting for the timer.
     func runClassificationCycle() async {
         guard !pendingEvents.isEmpty else { return }
+
+        // Gate on license: the LLM pipeline requires the `llm` feature flag.
+        if let provider = licenseProvider {
+            let features = await provider.currentFeatures
+            guard features.llm else {
+                Self.logger.info(
+                    "LLM classification skipped — plan=\(features.plan, privacy: .public) does not include llm. Events remain queued."
+                )
+                return
+            }
+        }
 
         // Gate on Ollama availability.
         guard await client.isHealthy() else {
