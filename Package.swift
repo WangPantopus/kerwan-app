@@ -35,7 +35,7 @@ let package = Package(
         // MARK: - XPC Protocol (shared between app and service)
         .target(
             name: "KerwanXPCProtocol",
-            path: "Kerwan/Sources/XPCProtocol",
+            path: "KerwanXPCProtocol",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
