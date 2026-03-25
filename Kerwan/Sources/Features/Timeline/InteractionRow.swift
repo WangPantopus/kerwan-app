@@ -146,17 +146,8 @@ struct InteractionRow: View {
 // MARK: - InteractionType display helpers
 
 extension InteractionType {
-    var systemImage: String {
-        switch self {
-        case .meeting:       return "video.fill"
-        case .emailSent:     return "arrow.up.circle.fill"
-        case .emailReceived: return "arrow.down.circle.fill"
-        case .slackDM:       return "message.fill"
-        case .phoneCalled:   return "phone.fill"
-        case .appActivity:   return "rectangle.on.rectangle.angled.fill"
-        }
-    }
-
+    /// Coloured background tint used in the timeline row icon bubble.
+    /// Distinct from `tintColor` (ContactProfileViewModel) which uses different hues.
     var iconColor: Color {
         switch self {
         case .meeting:       return .purple
@@ -165,17 +156,6 @@ extension InteractionType {
         case .slackDM:       return .green
         case .phoneCalled:   return .orange
         case .appActivity:   return .secondary
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .meeting:       return "Meeting"
-        case .emailSent:     return "Email Sent"
-        case .emailReceived: return "Email Received"
-        case .slackDM:       return "Slack DM"
-        case .phoneCalled:   return "Phone Call"
-        case .appActivity:   return "App Activity"
         }
     }
 }
@@ -192,18 +172,6 @@ extension EventSource {
         case .calendar:   return "calendar"
         case .browser:    return "globe"
         case .manualNote: return "pencil"
-        }
-    }
-
-    var shortLabel: String {
-        switch self {
-        case .audio:      return "Audio"
-        case .appFocus:   return "App"
-        case .email:      return "Email"
-        case .slack:      return "Slack"
-        case .calendar:   return "Calendar"
-        case .browser:    return "Browser"
-        case .manualNote: return "Note"
         }
     }
 

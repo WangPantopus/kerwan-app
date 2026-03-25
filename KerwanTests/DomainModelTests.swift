@@ -397,4 +397,94 @@ final class DomainModelTests: XCTestCase {
         let set: Set<CaptureStatus> = [.idle, .capturing, .idle, .error("a"), .error("a")]
         XCTAssertEqual(set.count, 3)
     }
+
+    // MARK: - Digest
+
+    func testDigestKindValues() {
+        XCTAssertEqual(DigestKind.allCases.count, 2)
+        XCTAssertEqual(DigestKind.daily.rawValue, "daily")
+        XCTAssertEqual(DigestKind.weekly.rawValue, "weekly")
+    }
+
+    func testDailyDigestDefaultInit() {
+        let digest = Digest(kind: .daily, title: "Morning Digest", bodyText: "Today was busy.")
+        XCTAssertFalse(digest.id.isEmpty)
+        XCTAssertEqual(digest.kind, .daily)
+        XCTAssertEqual(digest.title, "Morning Digest")
+        XCTAssertEqual(digest.meetingCount, 0)
+        XCTAssertEqual(digest.emailCount, 0)
+        XCTAssertNil(digest.totalHoursTracked)
+        XCTAssertTrue(digest.quietContactNames.isEmpty)
+    }
+
+    func testWeeklyDigestStats() {
+        let digest = Digest(
+            kind: .weekly,
+            title: "Weekly Summary",
+            bodyText: "Strong week.",
+            meetingCount: 5,
+            totalHoursTracked: 32.5,
+            estimatedBillableHours: 28.0,
+            sessionsReviewedCount: 12,
+            sessionsPendingCount: 3,
+            priorWeekBillableHours: 24.0
+        )
+        XCTAssertEqual(digest.kind, .weekly)
+        XCTAssertEqual(digest.meetingCount, 5)
+        XCTAssertEqual(digest.totalHoursTracked, 32.5)
+        XCTAssertEqual(digest.estimatedBillableHours, 28.0)
+        XCTAssertEqual(digest.sessionsReviewedCount, 12)
+        XCTAssertEqual(digest.sessionsPendingCount, 3)
+        XCTAssertEqual(digest.priorWeekBillableHours, 24.0)
+    }
+
+    func testDigestCodableRoundTrip() throws {
+        let digest = Digest(
+            id: "d-001",
+            kind: .daily,
+            title: "Morning Digest · Mon Mar 24",
+            bodyText: "You had 3 meetings.",
+            meetingCount: 3,
+            emailCount: 12,
+            slackCount: 7,
+            openPromiseCount: 2,
+            unreviewedSessionCount: 1,
+            quietContactNames: ["Alice", "Bob"]
+        )
+        let data = try JSONEncoder().encode(digest)
+        let decoded = try JSONDecoder().decode(Digest.self, from: data)
+        XCTAssertEqual(decoded, digest)
+        XCTAssertEqual(decoded.quietContactNames, ["Alice", "Bob"])
+    }
+
+    func testDigestHashable() {
+        let d1 = Digest(id: "same-id", kind: .daily, title: "A", bodyText: "B")
+        let d2 = Digest(id: "same-id", kind: .daily, title: "A", bodyText: "B")
+        XCTAssertEqual(d1, d2)
+        let set: Set<Digest> = [d1, d2]
+        XCTAssertEqual(set.count, 1)
+    }
+
+    // MARK: - WorkSession.durationFormatted (ReviewQueueView extension)
+
+    func testDurationFormattedMinutes() {
+        let session = WorkSession(
+            startedAt: Date(), endedAt: Date(timeIntervalSinceNow: 2700), durationSecs: 2700
+        )
+        XCTAssertEqual(session.durationFormatted, "45 min")
+    }
+
+    func testDurationFormattedWholeHours() {
+        let session = WorkSession(
+            startedAt: Date(), endedAt: Date(timeIntervalSinceNow: 7200), durationSecs: 7200
+        )
+        XCTAssertEqual(session.durationFormatted, "2h")
+    }
+
+    func testDurationFormattedHoursAndMinutes() {
+        let session = WorkSession(
+            startedAt: Date(), endedAt: Date(timeIntervalSinceNow: 5400), durationSecs: 5400
+        )
+        XCTAssertEqual(session.durationFormatted, "1h 30m")
+    }
 }
