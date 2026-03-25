@@ -26,6 +26,10 @@ public enum StorageError: Error, Sendable {
     case insufficientDiskSpace(available: Int64, required: Int64)
     /// The backup file failed an integrity check or could not be opened.
     case backupCorrupted
+    /// The database volume is full; writes cannot proceed.
+    case databaseFull
+    /// The crash-recovery process could not repair the database and no backup exists.
+    case unrecoverableCorruption
 }
 
 extension StorageError: LocalizedError {
@@ -55,6 +59,10 @@ extension StorageError: LocalizedError {
             return "Not enough disk space: \(avMB) MB available, \(reqMB) MB required."
         case .backupCorrupted:
             return "Backup file is corrupted or cannot be opened."
+        case .databaseFull:
+            return "Database volume is full. Free disk space and try again."
+        case .unrecoverableCorruption:
+            return "Database is corrupted and could not be recovered. No backup is available."
         }
     }
 }

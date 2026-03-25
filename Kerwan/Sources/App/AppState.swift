@@ -42,6 +42,11 @@ final class AppState {
     /// The most recent error to display to the user, if any.
     var lastError: String?
 
+    // MARK: - Degradation
+
+    /// Live health status for Whisper, Ollama, IMAP, AX, and Database subsystems.
+    var degradation = GracefulDegradationManager()
+
     init() {
         Self.logger.info("AppState initialized")
     }
