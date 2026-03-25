@@ -208,11 +208,11 @@ final class AppLaunchTimeTests: XCTestCase {
 
 /// Minimal `EmbeddingServiceStorage` for launch tests (zero I/O).
 actor PerfMockEmbeddingStorage: EmbeddingServiceStorage {
-    func listUnembeddedInteractions() async throws -> [Interaction] { [] }
+    func listUnembeddedInteractions() async throws -> [KerwanStorage.Interaction] { [] }
     func insertVectorEmbedding(interactionId: EntityID, embedding: [Float]) async throws {}
-    func listUnembeddedRawEvents(sources: [EventSource]) async throws -> [RawEvent] { [] }
+    func listUnembeddedRawEvents(sources: [EventSource]) async throws -> [KerwanStorage.RawEvent] { [] }
     func insertRawEventEmbedding(rawEventId: EntityID, chunkIndex: Int, embedding: [Float]) async throws {}
-    func listUnembeddedPromises() async throws -> [Promise] { [] }
+    func listUnembeddedPromises() async throws -> [KerwanStorage.Promise] { [] }
     func insertPromiseEmbedding(promiseId: EntityID, embedding: [Float]) async throws {}
 }
 
@@ -221,15 +221,15 @@ actor PerfMockEmbeddingStorage: EmbeddingServiceStorage {
 /// Minimal `SearchEngineStorage` conformance for launch tests (zero I/O).
 actor PerfMockSearchStorage: SearchEngineStorage {
 
-    func keywordSearchInteractions(query: String, limit: Int) async throws -> [SearchResult] { [] }
-    func keywordSearchPromises(query: String, limit: Int) async throws -> [SearchResult] { [] }
+    func keywordSearchInteractions(query: String, limit: Int) async throws -> [KerwanStorage.SearchResult] { [] }
+    func keywordSearchPromises(query: String, limit: Int) async throws -> [KerwanStorage.SearchResult] { [] }
     func vectorSearchInteractions(embedding: [Float], limit: Int) async throws -> [(interactionId: EntityID, distance: Float)] { [] }
     func vectorSearchPromises(embedding: [Float], limit: Int) async throws -> [(promiseId: EntityID, distance: Float)] { [] }
-    func fetchInteractions(ids: [EntityID]) async throws -> [Interaction] { [] }
-    func fetchContact(id: EntityID) async throws -> Contact? { nil }
-    func fetchPromises(ids: [EntityID]) async throws -> [Promise] { [] }
-    func fetchInteractions(forContactId: EntityID, limit: Int) async throws -> [SearchResult] { [] }
-    func fetchInteractions(inDateRange: DateInterval, interactionTypes: [InteractionType]?, limit: Int) async throws -> [SearchResult] { [] }
-    func fetchOpenPromises(forContactId: EntityID?, limit: Int) async throws -> [SearchResult] { [] }
-    func fetchWorkSessions(inDateRange: DateInterval?, limit: Int) async throws -> [SearchResult] { [] }
+    func fetchInteractions(ids: [EntityID]) async throws -> [KerwanStorage.Interaction] { [] }
+    func fetchContact(id: EntityID) async throws -> KerwanStorage.Contact? { nil }
+    func fetchPromises(ids: [EntityID]) async throws -> [KerwanStorage.Promise] { [] }
+    func fetchInteractions(forContactId: EntityID, limit: Int) async throws -> [KerwanStorage.SearchResult] { [] }
+    func fetchInteractions(inDateRange: DateInterval, interactionTypes: [KerwanStorage.InteractionType]?, limit: Int) async throws -> [KerwanStorage.SearchResult] { [] }
+    func fetchOpenPromises(forContactId: EntityID?, limit: Int) async throws -> [KerwanStorage.SearchResult] { [] }
+    func fetchWorkSessions(inDateRange: DateInterval?, limit: Int) async throws -> [KerwanStorage.SearchResult] { [] }
 }
