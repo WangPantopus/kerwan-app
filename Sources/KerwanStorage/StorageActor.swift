@@ -17,7 +17,7 @@ public actor StorageActor {
 
     private let writeConn: SQLiteConnection
     private let reader: ReadConnectionBox
-    private let dbPath: String
+    let dbPath: String
     private let log = Logger(subsystem: "com.kerwan.app", category: "StorageActor")
 
     // MARK: - Init
@@ -1127,6 +1127,28 @@ public actor StorageActor {
     // ====================================================================
     // MARK: - Internal connection accessors for module-internal extensions
     // ====================================================================
+
+    /// Calls `block` with the raw `sqlite3*` handle from the write connection.
+    ///
+    /// Used by `StorageActor+Backup.swift` to invoke the SQLite Online Backup API,
+    /// which requires the raw pointer. The block is called synchronously within
+    /// actor isolation; the pointer must not escape the block.
+    func withDatabaseHandle<T: Sendable>(
+        _ block: (OpaquePointer) throws -> T
+    ) throws -> T {
+        guard let handle = writeConn.db else {
+            throw StorageError.databaseNotFound
+        }
+        return try block(handle)
+    }
+
+    /// Issues `PRAGMA wal_checkpoint(TRUNCATE)` on the write connection.
+    ///
+    /// Used before a restore to ensure all committed WAL frames are folded into the
+    /// main database file, giving a clean base for the file-level replacement.
+    func checkpointWAL() throws {
+        try writeConn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    }
 
     /// Executes `block` with the actor-isolated write connection.
     ///
