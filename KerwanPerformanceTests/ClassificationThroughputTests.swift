@@ -197,7 +197,7 @@ final class ClassificationThroughputTests: XCTestCase {
 
     func test_classificationThroughput_3sLatency_over100EventsPerMinute() async throws {
         let storage = PerfMockClassificationStorage()
-        var capturedEventIds: [String] = []
+        nonisolated(unsafe) var capturedEventIds: [String] = []
         let lock = NSLock()
 
         // Register mock. The generate handler captures event IDs from the current batch.
