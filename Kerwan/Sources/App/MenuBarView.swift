@@ -1,7 +1,12 @@
 import SwiftUI
 import os
 
-/// The menu bar dropdown view providing quick status and controls.
+/// The dropdown menu presented by the Kerwan menu bar extra.
+///
+/// Rendered with `.menuBarExtraStyle(.menu)` so every top-level element maps to
+/// a native macOS menu item — no custom chrome needed. The view drives all
+/// quick-access controls: capture toggle, private mode, quick note, and
+/// navigation shortcuts to the main window, global search, and settings.
 struct MenuBarView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",
@@ -9,87 +14,151 @@ struct MenuBarView: View {
     )
 
     @Environment(AppState.self) private var appState
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
+
+    /// The `AppLifecycle` actor used to dispatch capture-control actions.
+    let lifecycle: AppLifecycle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Status section
-            statusItem(
-                "Capture",
-                isActive: appState.isCaptureActive,
-                detail: appState.isCaptureActive ? "Recording" : "Paused"
-            )
+        // MARK: Status line
+        statusRow
 
-            statusItem(
-                "Whisper",
-                isActive: appState.isWhisperServiceConnected,
-                detail: appState.isModelLoaded ? "Model loaded" : "No model"
-            )
+        Divider()
 
-            statusItem(
-                "Ollama",
-                isActive: appState.isOllamaRunning,
-                detail: appState.isOllamaRunning ? "Running" : "Stopped"
-            )
+        // MARK: Stats
+        Text(eventCountLabel)
+            .foregroundStyle(.secondary)
 
-            Divider()
+        Divider()
 
-            // Today's stats
-            if appState.todaySessionCount > 0 {
-                Text("\(appState.todaySessionCount) sessions today (\(formattedMinutes))")
-                    .font(.caption)
+        // MARK: Capture controls
+        captureToggle
+        privateModeToggle
 
-                Divider()
+        Divider()
+
+        // MARK: Quick actions
+        Button("Quick Note…") {
+            openWindow(id: "quick-note")
+            Self.logger.info("Quick note window opened")
+        }
+        .keyboardShortcut("n", modifiers: [.command, .shift])
+
+        Divider()
+
+        // MARK: Navigation
+        Button("Open Kerwan") {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "main")
+            Self.logger.info("Main window opened from menu bar")
+        }
+        .keyboardShortcut("0", modifiers: .command)
+
+        Button("Search…") {
+            openWindow(id: "search")
+            Self.logger.info("Global search opened from menu bar")
+        }
+        .keyboardShortcut("r", modifiers: [.command, .shift])
+
+        Divider()
+
+        // MARK: App
+        Button("Settings…") {
+            openSettings()
+            Self.logger.info("Settings window opened from menu bar")
+        }
+        .keyboardShortcut(",", modifiers: .command)
+
+        Button("Quit Kerwan") {
+            Self.logger.info("Quit initiated from menu bar")
+            NSApplication.shared.terminate(nil)
+        }
+        .keyboardShortcut("q", modifiers: .command)
+    }
+
+    // MARK: - Status Row
+
+    /// A non-interactive status indicator showing the current capture mode with a
+    /// coloured dot. Not a `Button` so it appears greyed-out / non-clickable like
+    /// native macOS status menu headers.
+    private var statusRow: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            Text(appState.captureStatus.description)
+                .fontWeight(.medium)
+            if let error = appState.lastError {
+                Spacer()
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                    .help(error)
             }
+        }
+        .padding(.vertical, 2)
+    }
 
-            // Actions
-            Button(appState.isCaptureActive ? "Pause Capture" : "Resume Capture") {
-                appState.isCaptureActive.toggle()
-                Self.logger.info("Capture toggled to \(appState.isCaptureActive)")
+    // MARK: - Capture Toggle
+
+    private var captureToggle: some View {
+        Button(captureToggleLabel) {
+            let lifecycle = lifecycle
+            let appState = appState
+            Task {
+                await lifecycle.toggleCapture(appState: appState)
             }
-            .keyboardShortcut("p", modifiers: [.command, .shift])
+        }
+        .keyboardShortcut("p", modifiers: [.command, .shift])
+        .disabled(appState.captureStatus == .privateMode)
+    }
 
-            Divider()
+    // MARK: - Private Mode Toggle
 
-            Button("Open Kerwan") {
-                NSApplication.shared.activate(ignoringOtherApps: true)
-                if let window = NSApplication.shared.windows.first {
-                    window.makeKeyAndOrderFront(nil)
-                }
+    private var privateModeToggle: some View {
+        Button(appState.captureStatus == .privateMode
+               ? "Disable Private Mode"
+               : "Enable Private Mode") {
+            let lifecycle = lifecycle
+            let appState = appState
+            if appState.captureStatus == .privateMode {
+                Task { await lifecycle.disablePrivateMode(appState: appState) }
+            } else {
+                Task { await lifecycle.enablePrivateMode(appState: appState) }
             }
-            .keyboardShortcut("o", modifiers: [.command])
-
-            Divider()
-
-            Button("Quit Kerwan") {
-                Self.logger.info("User initiated quit from menu bar")
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q", modifiers: [.command])
         }
     }
 
-    private func statusItem(_ name: String, isActive: Bool, detail: String) -> some View {
-        HStack {
-            Image(systemName: isActive ? "circle.fill" : "circle")
-                .foregroundStyle(isActive ? .green : .secondary)
-                .font(.caption2)
-            Text(name)
-            Spacer()
-            Text(detail)
-                .foregroundStyle(.secondary)
-                .font(.caption)
+    // MARK: - Helpers
+
+    /// The coloured dot next to the status label.
+    private var statusColor: Color {
+        switch appState.captureStatus {
+        case .capturing:   return .green
+        case .paused:      return .yellow
+        case .privateMode: return .red
+        case .idle:        return .secondary
+        case .error:       return .orange
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
     }
 
-    private var formattedMinutes: String {
-        let minutes = Int(appState.todayCapturedMinutes)
-        if minutes < 60 {
-            return "\(minutes) min"
+    /// The capture toggle button label.
+    private var captureToggleLabel: String {
+        switch appState.captureStatus {
+        case .capturing:            return "Pause Capture"
+        case .paused, .idle:        return "Resume Capture"
+        case .privateMode:          return "Pause Capture"   // disabled; see above
+        case .error:                return "Retry Capture"
         }
-        let hours = minutes / 60
-        let remaining = minutes % 60
-        return "\(hours)h \(remaining)m"
+    }
+
+    /// Formatted events-today count, e.g. "1,247 events today".
+    private var eventCountLabel: String {
+        let formatted = NumberFormatter.localizedString(
+            from: NSNumber(value: appState.eventsToday),
+            number: .decimal
+        )
+        return "\(formatted) events today"
     }
 }
