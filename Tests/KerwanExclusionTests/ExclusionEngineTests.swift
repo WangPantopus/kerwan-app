@@ -240,8 +240,6 @@ final class ExclusionEngineTests: XCTestCase {
         for c in candidates { _ = e.shouldExclude(c) }
         let elapsed = Date().timeIntervalSince(start) * 1000 // ms
 
-        // CI runners are typically 2-3× slower; use a relaxed threshold there.
-        let threshold: Double = ProcessInfo.processInfo.environment["CI"] == "true" ? 500 : 50
-        XCTAssertLessThan(elapsed, threshold, "50 rules × 1000 candidates took \(elapsed)ms, expected <\(threshold)ms")
+        XCTAssertLessThan(elapsed, 200, "50 rules × 1000 candidates took \(elapsed)ms, expected <200ms")
     }
 }
