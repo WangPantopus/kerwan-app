@@ -43,10 +43,19 @@ final class AppState {
     /// Promises in `.open` state that the user has not yet acted on.
     var openPromiseCount: Int = 0
 
+    /// Unbilled hours accumulated across sessions with `.undecided` or `.billable`
+    /// status that have not yet been invoiced. Drives the Billing sidebar badge.
+    var unbilledHours: Double = 0.0
+
     // MARK: - Navigation
 
     /// The sidebar item currently selected in the main window.
-    var selectedSidebarItem: NavigationItem? = .timeline
+    ///
+    /// Setting this from outside the window (e.g. from a menu bar action) causes
+    /// `ContentView` to sync the new value into `@SceneStorage` and update the
+    /// visible selection. The view is the source of truth for persistence;
+    /// this property is the programmatic entry point.
+    var selectedSidebarItem: SidebarItem? = .today
 
     /// The contact whose detail panel is open.
     var selectedContact: Contact? = nil
@@ -123,6 +132,11 @@ final class AppState {
     /// Updates the count of open (unactioned) promises.
     func updateOpenPromiseCount(_ count: Int) {
         openPromiseCount = count
+    }
+
+    /// Updates the total unbilled hours shown on the Billing sidebar badge.
+    func updateUnbilledHours(_ hours: Double) {
+        unbilledHours = max(0, hours)
     }
 
     /// Signals that WhisperService has started or finished a transcription pass.

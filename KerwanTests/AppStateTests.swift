@@ -185,8 +185,8 @@ final class AppStateTests: XCTestCase {
 
     // MARK: - Navigation state
 
-    func testSelectedSidebarItemDefaultsToTimeline() {
-        XCTAssertEqual(state.selectedSidebarItem, .timeline)
+    func testSelectedSidebarItemDefaultsToToday() {
+        XCTAssertEqual(state.selectedSidebarItem, .today)
     }
 
     func testSelectedContactAndClientDefaultToNil() {
