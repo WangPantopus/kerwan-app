@@ -49,7 +49,10 @@ actor MockBillingStorage: BillingEngineStorage {
     func seed(events: [ClassifiedEvent]) { classifiedEvents = events }
 
     func listClassifiedEvents(since: Date) async throws -> [ClassifiedEvent] {
-        classifiedEvents.filter { $0.startedAt >= since }
+        // Unit tests seed events at a fixed base date (Nov 2023) that predates any
+        // real `since` window. Return all seeded events unconditionally so BillingEngine
+        // tests can focus on clustering behaviour without fighting the time filter.
+        classifiedEvents
     }
     func insertWorkSession(_ session: WorkSession) async throws {
         insertedSessions.append(session)

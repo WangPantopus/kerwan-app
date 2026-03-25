@@ -162,7 +162,7 @@ public final class InvoiceExporter {
     // MARK: - Private: JSON wrapper
     // ═══════════════════════════════════════════════════════════════════
 
-    private struct WorkSessionExport: Codable {
+    private struct WorkSessionExport: Encodable {
         let id:             String
         let clientId:       String?
         let projectId:      String?
@@ -187,6 +187,30 @@ public final class InvoiceExporter {
             description    = s.description
             invoiceText    = s.invoiceText
             reviewedAt     = s.reviewedAt
+        }
+
+        /// Custom encoding ensures nil optional fields appear as JSON `null` rather
+        /// than being omitted entirely (which is what auto-synthesised `encodeIfPresent`
+        /// would do). This provides a stable JSON schema for third-party consumers.
+        private enum CodingKeys: String, CodingKey {
+            case id, clientId, projectId, startedAt, endedAt
+            case durationSecs, durationHours, billableStatus
+            case description, invoiceText, reviewedAt
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(id,             forKey: .id)
+            try c.encode(clientId,       forKey: .clientId)
+            try c.encode(projectId,      forKey: .projectId)
+            try c.encode(startedAt,      forKey: .startedAt)
+            try c.encode(endedAt,        forKey: .endedAt)
+            try c.encode(durationSecs,   forKey: .durationSecs)
+            try c.encode(durationHours,  forKey: .durationHours)
+            try c.encode(billableStatus, forKey: .billableStatus)
+            try c.encode(description,    forKey: .description)
+            try c.encode(invoiceText,    forKey: .invoiceText)
+            try c.encode(reviewedAt,     forKey: .reviewedAt)
         }
     }
 

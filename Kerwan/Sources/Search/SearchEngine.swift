@@ -5,24 +5,21 @@ import os
 ///
 /// ## Query lifecycle
 ///
-/// 1. **Intent classification** — ``classifyQuery(_:)`` calls Ollama with `format: json`
-///    to categorise the query into one of six ``QueryIntent/SearchType`` values.
-///    Results are cached for ``intentCacheTTL`` (30 s) to avoid redundant LLM calls
-///    during rapid re-queries.
+/// 1. **Parallel intent + embedding** — ``classifyQuery(_:)`` (Ollama intent JSON) and
+///    ``EmbeddingService/embedQuery(_:)`` (Ollama embeddings) run concurrently via `async let`.
+///    Intent results are cached for ``intentCacheTTL`` (30 s).
 ///
 /// 2. **Parallel retrieval** — three searches run concurrently via `async let`:
 ///    - Keyword FTS5 (top ``topK`` interactions + promises)
-///    - Semantic KNN (embed query → top ``topK`` interactions + promises, enriched)
+///    - Semantic KNN (top ``topK`` interactions + promises, enriched)
 ///    - Targeted domain query based on intent (contact timeline, date window, etc.)
 ///
 /// 3. **RRF merge** — ``mergeAndRank(keyword:semantic:targeted:contactMatchedIDs:filters:now:)``
-///    fuses all results using Reciprocal Rank Fusion (k = ``rrfK`` = 60) with boosts:
+///    applies ``SearchFilters/dateRange`` pre-filtering, fuses results with Reciprocal Rank
+///    Fusion (k = ``rrfK`` = 60), applies boosts, and normalises scores to 0.0–1.0:
 ///    - Targeted source: ×1.5
 ///    - Recency within 7 days: ×1.5; within 30 days: ×1.2
 ///    - Contact-match (result ID in `contactMatchedIDs`): ×2.0
-///
-/// 4. **Score normalisation** — final scores are normalised to 0.0–1.0 and returned
-///    sorted descending.
 ///
 /// ## Public API
 ///
@@ -100,13 +97,14 @@ public actor SearchEngine {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
 
-        // Step 1: Classify intent (cached; falls back to .general on failure).
-        let intent = await classifyQuery(trimmed)
+        // Step 1: Classify intent and embed query vector concurrently —
+        // both are independent network calls to different endpoints.
+        async let intentTask  = classifyQuery(trimmed)
+        async let vectorTask  = embedding.embedQuery(trimmed)
+        let intent      = await intentTask
+        let queryVector = try await vectorTask
 
-        // Step 2: Embed query vector for semantic search.
-        let queryVector = try await embedding.embedQuery(trimmed)
-
-        // Step 3: Parallel retrieval across all three search paths.
+        // Step 2: Parallel retrieval across all three search paths.
         async let kwTask  = keywordSearch(query: trimmed)
         async let semTask = semanticSearch(vector: queryVector)
         async let tgtTask = targetedSearch(intent: intent, filters: filters, query: trimmed)
@@ -115,7 +113,7 @@ public actor SearchEngine {
         let semResults = try await semTask
         let (tgtResults, contactMatchedIDs) = try await tgtTask
 
-        // Step 4: Merge with RRF and return ranked results.
+        // Step 3: Merge with RRF and return ranked results.
         return mergeAndRank(
             keyword:           kwResults,
             semantic:          semResults,
@@ -192,6 +190,17 @@ public actor SearchEngine {
         filters:           SearchFilters,
         now:               Date = Date()
     ) -> [SearchResult] {
+        // Pre-filter all three result sets by dateRange (and source) when specified.
+        // Targeted queries already fetch only in-range data, but keyword and semantic
+        // results are unrestricted — apply filters here for consistency.
+        let keep: (SearchResult) -> Bool = { result in
+            if let dr = filters.dateRange, !dr.contains(result.timestamp) { return false }
+            return true
+        }
+        let keyword  = keyword.filter(keep)
+        let semantic = semantic.filter(keep)
+        let targeted = targeted.filter(keep)
+
         var scores:      [EntityID: Double]      = [:]
         var resultsByID: [EntityID: SearchResult] = [:]
 
