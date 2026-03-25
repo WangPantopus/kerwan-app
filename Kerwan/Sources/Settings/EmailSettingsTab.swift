@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Email Accounts tab — lists connected accounts with sync status and
 /// provides a button to connect a Gmail account via OAuth.
+@MainActor
 struct EmailSettingsTab: View {
     @Bindable var vm: SettingsViewModel
 

@@ -8,6 +8,7 @@ import os
 /// Rows show: avatar, name, domain, contact count, billed hours this month,
 /// and last-interaction date. Rows are sorted newest-interaction-first.
 /// The `ClientListViewModel` owns all state and storage calls.
+@MainActor
 struct ClientListView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

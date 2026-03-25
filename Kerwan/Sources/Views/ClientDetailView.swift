@@ -15,6 +15,7 @@ import os
 ///  6. Work Sessions — sessions grouped by ISO week
 ///
 /// Navigated to via `NavigationLink(value: Client)` in `ClientListView`.
+@MainActor
 struct ClientDetailView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

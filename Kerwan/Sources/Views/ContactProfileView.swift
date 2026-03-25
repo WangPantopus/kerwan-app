@@ -19,6 +19,7 @@ import os
 ///   toolbar actions (edit, merge, delete, export).
 /// - All storage calls go through `ContactProfileStorageService`; stubs return
 ///   empty until the persistence workstream is injected.
+@MainActor
 struct ContactProfileView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

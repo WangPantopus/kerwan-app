@@ -7,6 +7,7 @@ import os
 /// 1. Enter their Chrome extension ID (needed to install the NMH manifest).
 /// 2. Install / uninstall the Native Messaging Host manifest.
 /// 3. See live connection status and toggle browser capture on/off.
+@MainActor
 struct BrowserSettingsTab: View {
 
     private static let logger = Logger(

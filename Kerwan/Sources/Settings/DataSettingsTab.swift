@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Data tab — shows database file size, lets the user export a backup via
 /// `NSSavePanel`, delete data older than a chosen date, or wipe everything.
+@MainActor
 struct DataSettingsTab: View {
     @Bindable var vm: SettingsViewModel
 

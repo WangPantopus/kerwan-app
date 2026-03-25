@@ -13,6 +13,7 @@ import SwiftUI
 ///
 /// Navigation is driven by `OnboardingViewModel`. Each step slides in/out
 /// using an asymmetric transition keyed to `vm.isAnimatingForward`.
+@MainActor
 struct OnboardingView: View {
     @Bindable var vm: OnboardingViewModel
 
