@@ -574,7 +574,6 @@ final class StorageActorAdditionalCRUDTests: XCTestCase {
         try await storage.updateWorkSession(
             id: session.id,
             billable: .billable,
-            reviewed: true,
             invoiceText: "R&D — 1 h"
         )
         let count = await storage.countUnreviewedSessions()
@@ -602,8 +601,8 @@ final class StorageActorAdditionalCRUDTests: XCTestCase {
 
     func test_storage_userSettings_roundTrip() async throws {
         let storage = try makeStorage()
-        try await storage.updateUserSetting(key: "hourlyRate", value: "175.50")
+        try await storage.updateUserSetting(key: "default_currency", value: "EUR")
         let settings = await storage.fetchUserSettings()
-        XCTAssertEqual(settings.hourlyRate, 175.50, accuracy: 0.01)
+        XCTAssertEqual(settings.defaultCurrency, "EUR")
     }
 }
