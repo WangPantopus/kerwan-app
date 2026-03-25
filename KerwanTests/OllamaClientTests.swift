@@ -432,7 +432,7 @@ final class OllamaClientTests: XCTestCase {
             (200, Data(ndjson.utf8))
         }
 
-        var progressValues: [Double] = []
+        nonisolated(unsafe) var progressValues: [Double] = []
         try await client.pullModel(name: "llama3:8b-instruct-q4_K_M") { fraction in
             progressValues.append(fraction)
         }

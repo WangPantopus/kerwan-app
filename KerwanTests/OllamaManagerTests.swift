@@ -118,7 +118,7 @@ final class OllamaManagerTests: XCTestCase {
 
     func testEnsureModels_pullsMissingModel() async throws {
         // First invocation of api/tags returns only one model.
-        var callCount = 0
+        nonisolated(unsafe) var callCount = 0
         MockOllamaURLProtocol.register(path: "api/tags") { _ in
             callCount += 1
             // After pull, return both models.
@@ -130,8 +130,8 @@ final class OllamaManagerTests: XCTestCase {
             return (200, data)
         }
 
-        var pullCalled = false
-        var pulledModelName: String?
+        nonisolated(unsafe) var pullCalled = false
+        nonisolated(unsafe) var pulledModelName: String?
         MockOllamaURLProtocol.register(path: "api/pull") { request in
             pullCalled = true
             if let body = request.httpBody,
@@ -157,7 +157,7 @@ final class OllamaManagerTests: XCTestCase {
     }
 
     func testEnsureModels_skipsAlreadyPresentModels() async throws {
-        var pullCalled = false
+        nonisolated(unsafe) var pullCalled = false
         MockOllamaURLProtocol.register(path: "api/tags") { _ in
             let models: [[String: Any]] = [
                 ["name": "llama3:8b-instruct-q4_K_M"],
