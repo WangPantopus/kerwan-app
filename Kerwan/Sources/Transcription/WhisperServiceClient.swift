@@ -115,7 +115,8 @@ public actor WhisperServiceClient {
                         // Deliver partial results if any segments were produced.
                         if let partial = encodedSegments, !partial.isEmpty {
                             // Log the partial result but surface the error to the caller.
-                            Task { await self?.log.warning("Partial transcription with error: \(error.localizedDescription)") }
+                            let s = self
+                            Task { await s?.log.warning("Partial transcription with error: \(error.localizedDescription)") }
                         }
                         cont.resume(throwing: error)
                         return
@@ -135,7 +136,8 @@ public actor WhisperServiceClient {
         } onTimeout: { [weak self] in
             // Kill the connection so the service process is terminated.
             // The next API call will reconnect.
-            Task { await self?.invalidateConnection() }
+            let s = self
+            Task { await s?.invalidateConnection() }
         }
     }
 
@@ -168,7 +170,8 @@ public actor WhisperServiceClient {
     private func makeProxy() throws -> any WhisperServiceProtocol {
         let conn = existingOrNewConnection()
         guard let proxy = conn.remoteObjectProxyWithErrorHandler({ [weak self] error in
-            Task { await self?.handleConnectionError(error) }
+            let s = self
+            Task { await s?.handleConnectionError(error) }
         }) as? any WhisperServiceProtocol else {
             throw WhisperServiceError.connectionFailed
         }
@@ -181,10 +184,12 @@ public actor WhisperServiceClient {
         conn.remoteObjectInterface = makeWhisperXPCInterface()
 
         conn.invalidationHandler = { [weak self] in
-            Task { await self?.handleInvalidation() }
+            let s = self
+            Task { await s?.handleInvalidation() }
         }
         conn.interruptionHandler = { [weak self] in
-            Task { await self?.handleInterruption() }
+            let s = self
+            Task { await s?.handleInterruption() }
         }
         conn.resume()
 
