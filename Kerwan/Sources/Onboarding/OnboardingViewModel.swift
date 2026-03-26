@@ -3,6 +3,7 @@ import AVFoundation
 import CoreGraphics
 import EventKit
 import AppKit
+import Combine
 import os
 
 // MARK: - OnboardingStep
@@ -103,9 +104,26 @@ final class OnboardingViewModel {
     var downloadError: String? = nil
     var aiSetupSkipped: Bool = false
 
+    // MARK: - Dependencies
+
+    private let gmailOAuth: GmailOAuthManager
+    private let whisperModel: ModelManager
+    private let ollamaManager: OllamaManager
+
+    /// Combine subscriptions kept alive for the lifetime of this view model.
+    private var cancellables = Set<AnyCancellable>()
+
     // MARK: - Init
 
-    init() {
+    init(
+        gmailOAuth: GmailOAuthManager = GmailOAuthManager(),
+        whisperModel: ModelManager = ModelManager(),
+        ollamaManager: OllamaManager = OllamaManager()
+    ) {
+        self.gmailOAuth    = gmailOAuth
+        self.whisperModel  = whisperModel
+        self.ollamaManager = ollamaManager
+
         let saved = UserDefaults.standard.integer(forKey: Keys.lastStep)
         self.currentStep = OnboardingStep(rawValue: saved) ?? .welcome
         self.permissionsSkipped = UserDefaults.standard.bool(forKey: Keys.skippedPermissions)
@@ -232,49 +250,95 @@ final class OnboardingViewModel {
 
     // MARK: - Gmail connection
 
+    /// Initiates the real Gmail OAuth flow via `GmailOAuthManager.startOAuthFlow()`.
+    /// Opens the system browser to Google's consent screen, waits for the callback,
+    /// and persists the resulting `GmailAccount` to the Keychain.
     func connectGmail() {
         guard !isConnectingGmail else { return }
         isConnectingGmail = true
-        // Full OAuth implementation provided by the email workstream.
         Task {
-            try? await Task.sleep(for: .milliseconds(800))
-            gmailConnected = true
+            do {
+                _ = try await gmailOAuth.startOAuthFlow()
+                gmailConnected = true
+                Self.logger.info("Gmail OAuth completed successfully")
+            } catch {
+                gmailConnected = false
+                Self.logger.error("Gmail OAuth failed: \(error.localizedDescription, privacy: .public)")
+            }
             isConnectingGmail = false
-            Self.logger.debug("Gmail connection stub completed")
         }
     }
 
     // MARK: - AI model download
 
+    /// Starts downloading the Whisper speech-recognition model via `ModelManager`
+    /// and the Ollama language model via `OllamaManager`, reporting real
+    /// `URLSession`-backed progress for each.
     func startModelDownload() {
         guard !isDownloading, !downloadComplete else { return }
         isDownloading = true
         downloadError = nil
         whisperProgress = 0
-        ollamaProgress = 0
-        whisperComplete = false
-        ollamaComplete = false
-        Task { await runSimulatedDownload() }
+        ollamaProgress  = 0
+        whisperComplete  = false
+        ollamaComplete   = false
+
+        // Observe real Whisper download progress via ModelManager's @Published state.
+        whisperModel.$state
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                switch state {
+                case .downloading(let fraction):
+                    self.whisperProgress = fraction
+                case .ready:
+                    self.whisperProgress = 1.0
+                    self.whisperComplete  = true
+                    // Begin Ollama pull once Whisper finishes.
+                    self.pullOllamaModels()
+                case .failed(let reason):
+                    self.downloadError = "Whisper download failed: \(reason)"
+                    self.isDownloading  = false
+                case .notInstalled:
+                    break
+                }
+            }
+            .store(in: &cancellables)
+
+        whisperModel.downloadModelIfNeeded()
     }
 
-    /// Placeholder progress simulation until the WhisperKit / Ollama download
-    /// workstream provides real `URLSession` progress tracking.
-    private func runSimulatedDownload() async {
-        // Whisper model (≈150 MB): 20 ticks × 120 ms ≈ 2.4 s
-        for tick in 1...20 {
-            try? await Task.sleep(for: .milliseconds(120))
-            whisperProgress = Double(tick) / 20.0
-        }
-        whisperComplete = true
+    /// Pulls required Ollama models, reporting fractional progress.
+    ///
+    /// Called automatically after the Whisper model download completes.
+    /// On Ollama-not-installed errors the user is shown an appropriate
+    /// message and the step can be retried or skipped.
+    private func pullOllamaModels() {
+        Task {
+            do {
+                // Ensure the Ollama daemon is running (launches it if installed).
+                try await ollamaManager.ensureRunning()
 
-        // Ollama model (≈4 GB): 20 ticks × 250 ms ≈ 5 s
-        for tick in 1...20 {
-            try? await Task.sleep(for: .milliseconds(250))
-            ollamaProgress = Double(tick) / 20.0
+                // Pull the primary language-model used for digests and briefs.
+                // Progress is reported directly by OllamaClient's streaming pull API.
+                try await ollamaManager.client.pullModel(
+                    name: "llama3:8b-instruct-q4_K_M"
+                ) { [weak self] fraction in
+                    let s = self
+                    Task { @MainActor in
+                        s?.ollamaProgress = fraction
+                    }
+                }
+                ollamaProgress = 1.0
+                ollamaComplete  = true
+                isDownloading   = false
+                Self.logger.info("Ollama model pull completed")
+            } catch {
+                Self.logger.error("Ollama pull failed: \(error.localizedDescription, privacy: .public)")
+                downloadError = "AI model download failed: \(error.localizedDescription)"
+                isDownloading = false
+            }
         }
-        ollamaComplete = true
-        isDownloading = false
-        Self.logger.debug("AI model download simulation complete")
     }
 
     var downloadComplete: Bool { whisperComplete && ollamaComplete }
