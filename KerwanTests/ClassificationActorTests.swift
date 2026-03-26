@@ -737,4 +737,45 @@ final class ClassificationActorTests: XCTestCase {
         await actor.shutdown()
         // No assertion — just confirming no crash or hang.
     }
+
+    // MARK: - License gating
+
+    /// When a ``LicenseFeatureProvider`` is injected whose `currentFeatures.llm`
+    /// is `false`, `runClassificationCycle()` must exit immediately without
+    /// contacting Ollama and must leave events in the pending queue.
+    func testLicenseGating_llmFeatureDisabled_skipsClassification() async throws {
+        // Arrange: provider that always reports llm = false.
+        actor FreeTierProvider: LicenseFeatureProvider {
+            var currentFeatures: LicenseFeatures { .free }   // llm == false
+        }
+
+        // Record whether Ollama was contacted.
+        nonisolated(unsafe) var ollamaCalled = false
+        MockOllamaURLProtocol.register(path: "api/tags") { _ in
+            ollamaCalled = true
+            return (200, Data(#"{"models":[]}"#.utf8))
+        }
+        MockOllamaURLProtocol.register(path: "api/generate") { _ in
+            ollamaCalled = true
+            return (200, Data(#"{"response":"{}","done":true}"#.utf8))
+        }
+
+        let session = MockOllamaURLProtocol.makeSession()
+        actor = ClassificationActor(
+            client: OllamaClient(session: session),
+            storage: storage
+        )
+        await actor.setLicenseProvider(FreeTierProvider())
+        await actor.enqueue([makeEvent(id: "gated-1", rawText: "Should not be processed.")])
+
+        // Act
+        await actor.runClassificationCycle()
+
+        // Assert: Ollama was never contacted.
+        XCTAssertFalse(ollamaCalled, "Ollama must not be contacted when llm feature is disabled")
+
+        // Assert: the event remains pending (storage received no inserts).
+        let inserted = await storage.insertedInteractions
+        XCTAssertTrue(inserted.isEmpty, "No interactions should be inserted when license blocks LLM")
+    }
 }

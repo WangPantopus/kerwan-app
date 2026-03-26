@@ -27,7 +27,21 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         do {
-            let (response, data) = try handler(request)
+            // URLSession converts httpBody → httpBodyStream when routing
+            // through URLProtocol. Reconstruct httpBody so handlers can read it.
+            var req = request
+            if req.httpBody == nil, let stream = req.httpBodyStream {
+                stream.open()
+                defer { stream.close() }
+                var bodyData = Data()
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                while stream.hasBytesAvailable {
+                    let n = stream.read(&buffer, maxLength: buffer.count)
+                    if n > 0 { bodyData.append(buffer, count: n) }
+                }
+                req.httpBody = bodyData
+            }
+            let (response, data) = try handler(req)
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
