@@ -6,6 +6,8 @@ import Foundation
 /// and retrieved by `TodayView`. The structured stats fields allow the UI to render
 /// rich cards without re-running the storage queries.
 public struct Digest: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: Digest, rhs: Digest) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 

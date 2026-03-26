@@ -10,6 +10,8 @@ import Foundation
 /// An inactive project (``isActive`` = false) no longer appears in suggestion
 /// dropdowns but retains its historical data.
 public struct Project: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: Project, rhs: Project) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 

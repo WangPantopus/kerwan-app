@@ -12,7 +12,18 @@
 // • WAVSpool tests use a temporary directory so production files are untouched.
 
 import XCTest
+import KerwanXPCProtocol
 @testable import Kerwan
+
+// MARK: - MutBox (strict-concurrency helper)
+
+/// Single-owner mutable box used in tests so `@Sendable` closures can mutate
+/// local state without triggering strict-concurrency errors.  Tests are
+/// single-threaded, so the absence of locking is safe.
+private final class MutBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ v: T) { self.value = v }
+}
 
 // MARK: - MockWhisperTranscribing
 
@@ -49,13 +60,13 @@ actor MockWhisperTranscribing: WhisperTranscribing {
 // MARK: - MockEventDelegate
 
 actor MockEventDelegate: CaptureEventDelegate {
-    private(set) var batches: [[RawEvent]] = []
+    private(set) var batches: [[CaptureEvent]] = []
 
-    func didCapture(_ events: [RawEvent]) async {
+    func didCapture(_ events: [CaptureEvent]) async {
         batches.append(events)
     }
 
-    var allEvents: [RawEvent] { batches.flatMap { $0 } }
+    var allEvents: [CaptureEvent] { batches.flatMap { $0 } }
 }
 
 // MARK: - Helpers
@@ -277,7 +288,7 @@ final class SpeakingSessionTests: XCTestCase {
         s.addChunkSegments([
             makeSegment(text: "Hello there", start: 0, end: 3, language: "en", confidence: 0.95),
         ], chunkStart: t0, overlapSeconds: 0)
-        let event = s.toRawEvent()
+        let event = s.toCaptureEvent()
 
         XCTAssertEqual(event.source, .audio)
         XCTAssertEqual(event.startedAt, t0)
@@ -449,7 +460,7 @@ final class TranscriptionActorLifecycleTests: XCTestCase {
 
     func test_start_withLoadError_stateRemainsIdle() async {
         let (ta, whisper, _) = makeActor()
-        whisper.loadError = WhisperServiceError.modelLoadFailed
+        whisper.loadError = WhisperServiceError.modelLoadFailed(reason: "test")
         do {
             try await ta.start()
             XCTFail("Expected throw")
@@ -523,7 +534,7 @@ final class TranscriptionActorPipelineTests: XCTestCase {
 
     // MARK: Single chunk → RawEvent
 
-    func test_singleChunk_emitsOneRawEvent() async throws {
+    func test_singleChunk_emitsOneCaptureEvent() async throws {
         let (ta, _, delegate) = makeActor(segments: [
             makeSegment(text: "Hello world", start: 0, end: 3),
         ])
@@ -623,7 +634,7 @@ final class TranscriptionActorPipelineTests: XCTestCase {
         whisper.transcribeError = nil
         // We can't easily set per-call error without a more complex mock,
         // so just test that a persistent error produces no events.
-        whisper.transcribeError = WhisperServiceError.transcriptionFailed
+        whisper.transcribeError = WhisperServiceError.transcriptionFailed(reason: "test")
 
         try await ta.start()
         await ta.didCaptureAudioChunk(makeChunk())
@@ -642,9 +653,9 @@ final class TranscriptionActorPipelineTests: XCTestCase {
         ])
         // Make transcription take longer than the chunk.
         whisper.transcribeDelay = 0.5  // 0.5s to transcribe a 0.1s chunk → 0.2x realtime
-        var receivedFactor: Double?
+        let receivedFactor = MutBox(Double?.none)
         let callback: @Sendable (Double) -> Void = { factor in
-            receivedFactor = factor
+            receivedFactor.value = factor
         }
         ta.onBehindRealtime = callback
 
@@ -652,27 +663,27 @@ final class TranscriptionActorPipelineTests: XCTestCase {
         await ta.didCaptureAudioChunk(makeChunk(durationSeconds: 0.1))
         await ta.stop()
 
-        XCTAssertNotNil(receivedFactor, "onBehindRealtime should be called")
-        XCTAssertLessThan(receivedFactor ?? 99, 1.0)
+        XCTAssertNotNil(receivedFactor.value, "onBehindRealtime should be called")
+        XCTAssertLessThan(receivedFactor.value ?? 99, 1.0)
     }
 
     // MARK: Progress tracking
 
     func test_progress_updatesOnEnqueue() async throws {
         let (ta, _, _) = makeActor(segments: [])
-        var progressSnapshots: [TranscriptionActor.Progress] = []
-        ta.onProgressUpdate = { p in progressSnapshots.append(p) }
+        let progressSnapshots = MutBox([TranscriptionActor.Progress]())
+        ta.onProgressUpdate = { p in progressSnapshots.value.append(p) }
 
         try await ta.start()
         await ta.didCaptureAudioChunk(makeChunk())
         await ta.stop()
 
-        XCTAssertFalse(progressSnapshots.isEmpty, "onProgressUpdate should be called")
+        XCTAssertFalse(progressSnapshots.value.isEmpty, "onProgressUpdate should be called")
     }
 
     // MARK: Classification delegate
 
-    func test_classificationDelegate_receivesRawEvent() async throws {
+    func test_classificationDelegate_receivesCaptureEvent() async throws {
         let classDel = MockEventDelegate()
         let whisper3 = MockWhisperTranscribing()
         whisper3.segmentsToReturn = [makeSegment(text: "Hi", start: 0, end: 1)]

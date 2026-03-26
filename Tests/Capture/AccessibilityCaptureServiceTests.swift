@@ -30,10 +30,10 @@ import AppKit
 
 /// Accumulates all events received from the service under test.
 actor MockCaptureEventDelegate: CaptureEventDelegate {
-    private(set) var allEvents: [RawEvent] = []
+    private(set) var allEvents: [CaptureEvent] = []
     private(set) var callCount: Int = 0
 
-    func didCapture(_ events: [RawEvent]) async {
+    func didCapture(_ events: [CaptureEvent]) async {
         allEvents.append(contentsOf: events)
         callCount += 1
     }
@@ -49,7 +49,7 @@ actor MockCaptureEventDelegate: CaptureEventDelegate {
 final class MockExclusionEngine: ExclusionChecking, @unchecked Sendable {
     var blockedApps: Set<String> = []
 
-    func shouldExclude(_ event: RawEvent) -> Bool {
+    func shouldExclude(_ event: CaptureEvent) -> Bool {
         guard let app = event.sourceApp else { return false }
         return blockedApps.contains(app)
     }
@@ -556,19 +556,19 @@ final class AccessibilityCaptureServiceTests: XCTestCase {
 
     func testRawEventClosedAtSetsEndedAt() throws {
         let start = Date(timeIntervalSinceNow: -10)
-        let event = RawEvent(source: .appFocus, startedAt: start)
+        let event = CaptureEvent(source: .appFocus, startedAt: start)
         let closed = event.closed(at: Date())
         XCTAssertNotNil(closed.endedAt)
         XCTAssertGreaterThanOrEqual(closed.durationSeconds ?? 0, 9.9)
     }
 
     func testRawEventOpenEventHasNilDuration() {
-        let event = RawEvent(source: .appFocus)
+        let event = CaptureEvent(source: .appFocus)
         XCTAssertNil(event.durationSeconds)
     }
 
     func testRawEventWithMetadataReplacesJSON() {
-        let event = RawEvent(source: .appFocus, metadataJSON: "old")
+        let event = CaptureEvent(source: .appFocus, metadataJSON: "old")
         let updated = event.withMetadata("new")
         XCTAssertEqual(updated.metadataJSON, "new")
         XCTAssertEqual(event.metadataJSON, "old")  // original unchanged
@@ -607,15 +607,15 @@ final class AccessibilityCaptureServiceTests: XCTestCase {
 
     func testPassthroughExclusionEngineAllowsAll() {
         let engine = PassthroughExclusionEngine()
-        XCTAssertFalse(engine.shouldExclude(RawEvent(source: .appFocus, sourceApp: "Anything")))
-        XCTAssertFalse(engine.shouldExclude(RawEvent(source: .slack)))
+        XCTAssertFalse(engine.shouldExclude(CaptureEvent(source: .appFocus, sourceApp: "Anything")))
+        XCTAssertFalse(engine.shouldExclude(CaptureEvent(source: .slack)))
     }
 
     func testMockExclusionEngineBlocksCorrectly() {
         exclusionEngine.blockedApps = ["Blocked"]
-        XCTAssertTrue(exclusionEngine.shouldExclude(RawEvent(source: .appFocus, sourceApp: "Blocked")))
-        XCTAssertFalse(exclusionEngine.shouldExclude(RawEvent(source: .appFocus, sourceApp: "Allowed")))
-        XCTAssertFalse(exclusionEngine.shouldExclude(RawEvent(source: .appFocus, sourceApp: nil)))
+        XCTAssertTrue(exclusionEngine.shouldExclude(CaptureEvent(source: .appFocus, sourceApp: "Blocked")))
+        XCTAssertFalse(exclusionEngine.shouldExclude(CaptureEvent(source: .appFocus, sourceApp: "Allowed")))
+        XCTAssertFalse(exclusionEngine.shouldExclude(CaptureEvent(source: .appFocus, sourceApp: nil)))
     }
 
     // MARK: - CaptureSource

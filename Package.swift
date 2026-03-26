@@ -95,6 +95,7 @@ let package = Package(
                 .product(name: "SQLite", package: "SQLite.swift"),
                 .product(name: "Sparkle", package: "Sparkle"),
                 "KerwanKeychain",
+                "KerwanStorage",
                 "KerwanXPCProtocol",
                 "SQLCipher",
             ],
@@ -185,6 +186,36 @@ let package = Package(
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
+        ),
+        .testTarget(
+            name: "KerwanCalendarTests",
+            dependencies: ["Kerwan", "KerwanXPCProtocol"],
+            path: "Tests/Calendar",
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+        ),
+        .testTarget(
+            name: "KerwanCaptureServiceTests",
+            dependencies: ["Kerwan", "KerwanXPCProtocol"],
+            path: "Tests/Capture",
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+        ),
+        .testTarget(
+            name: "KerwanCaptureManagerTests",
+            dependencies: ["Kerwan", "KerwanXPCProtocol"],
+            path: "Tests/CaptureManager",
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+        ),
+        .testTarget(
+            name: "KerwanEmailTests",
+            dependencies: ["Kerwan", "KerwanXPCProtocol", "KerwanKeychain"],
+            path: "Tests/Email",
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+        ),
+        .testTarget(
+            name: "KerwanTranscriptionTests",
+            dependencies: ["Kerwan", "KerwanXPCProtocol"],
+            path: "Tests/Transcription",
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
     ] + (isCI ? [] : [
         .testTarget(

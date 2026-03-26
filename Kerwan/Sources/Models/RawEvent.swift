@@ -17,6 +17,8 @@ import Foundation
 /// model improves) and for audit/debugging. Events marked ``isExcluded``
 /// matched an ``ExclusionRule`` and are skipped by the classification pipeline.
 public struct RawEvent: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: RawEvent, rhs: RawEvent) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 

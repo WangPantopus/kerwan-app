@@ -96,6 +96,13 @@ final class AppState {
         )
     }
 
+    // MARK: - Client creation request
+
+    /// Set to `true` by the toolbar "New Client" button to signal `ClientListView`
+    /// to open its new-client sheet. Reset to `false` by `ClientListView` after
+    /// the sheet appears.
+    var requestNewClient: Bool = false
+
     // MARK: - Browser Extension
 
     /// Whether the Chrome extension is currently connected via the NMH socket.

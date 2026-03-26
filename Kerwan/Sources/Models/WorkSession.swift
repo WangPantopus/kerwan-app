@@ -12,6 +12,8 @@ import Foundation
 /// Confirmed sessions can have ``invoiceText`` set for direct inclusion
 /// in client invoices.
 public struct WorkSession: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: WorkSession, rhs: WorkSession) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 

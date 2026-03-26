@@ -33,6 +33,14 @@ struct ClientListView: View {
         .searchable(text: $vm.filterText, placement: .sidebar, prompt: "Filter clients…")
         .toolbar { toolbarContent }
         .task { await vm.load() }
+        // Respond to the global toolbar "New Client" button (⌘N) in ContentView,
+        // which sets appState.requestNewClient = true and navigates here.
+        .onChange(of: appState.requestNewClient) { _, requested in
+            if requested {
+                vm.isPresentingNewClient = true
+                appState.requestNewClient = false
+            }
+        }
         .sheet(isPresented: $vm.isPresentingNewClient) {
             NewClientSheet { name, domain, notes in
                 Task { await vm.createClient(name: name, domain: domain, notes: notes) }

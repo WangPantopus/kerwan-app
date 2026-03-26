@@ -11,6 +11,8 @@ import Foundation
 /// done, snooze them, or dismiss false positives. Overdue promises trigger
 /// notifications via the daily digest.
 public struct Promise: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: Promise, rhs: Promise) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 

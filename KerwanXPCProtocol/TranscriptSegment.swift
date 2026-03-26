@@ -2,7 +2,9 @@ import Foundation
 
 /// A single segment of transcribed audio, representing a contiguous span of speech
 /// with timing, language, and confidence metadata.
-public struct TranscriptSegment: Codable, Sendable, Hashable, Identifiable {
+///
+/// Segments are ordered chronologically (`Comparable` by `startTime`).
+public struct TranscriptSegment: Codable, Sendable, Hashable, Identifiable, Comparable {
     /// Stable identifier derived from content and timing.
     public var id: String {
         "\(startTime)-\(endTime)-\(text.hashValue)"
@@ -47,5 +49,29 @@ public struct TranscriptSegment: Codable, Sendable, Hashable, Identifiable {
         self.endTime = endTime
         self.language = language
         self.confidence = max(0.0, min(1.0, confidence))
+    }
+}
+
+// MARK: - Comparable (chronological order)
+
+extension TranscriptSegment {
+    /// Segments are ordered by start time; equal start times are ordered by end time.
+    public static func < (lhs: TranscriptSegment, rhs: TranscriptSegment) -> Bool {
+        if lhs.startTime != rhs.startTime { return lhs.startTime < rhs.startTime }
+        return lhs.endTime < rhs.endTime
+    }
+}
+
+// MARK: - JSON helpers
+
+public extension TranscriptSegment {
+    /// Returns a JSON-encoded representation suitable for XPC transport.
+    func encoded() throws -> Data {
+        try JSONEncoder().encode(self)
+    }
+
+    /// Decodes a segment from an XPC-transported JSON blob.
+    static func decode(from data: Data) throws -> TranscriptSegment {
+        try JSONDecoder().decode(TranscriptSegment.self, from: data)
     }
 }

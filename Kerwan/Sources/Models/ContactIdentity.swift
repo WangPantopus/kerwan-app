@@ -12,6 +12,8 @@ import Foundation
 /// this identity correctly maps to its parent contact. Low-confidence links
 /// surface in the user's review queue.
 public struct ContactIdentity: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: ContactIdentity, rhs: ContactIdentity) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 

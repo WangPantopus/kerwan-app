@@ -19,6 +19,33 @@
 import XCTest
 @testable import Kerwan
 
+// MARK: - Recorder (local copy; also defined in Email tests target)
+
+/// Thread-safe list for observing side-effecting calls.
+fileprivate final class Recorder<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _values: [T] = []
+    var values: [T] { lock.withLock { _values } }
+    func record(_ value: T) { lock.withLock { _values.append(value) } }
+}
+
+// MARK: - XCTAssertThrowsErrorAsync
+
+fileprivate func XCTAssertThrowsErrorAsync<T>(
+    _ expression: @autoclosure () async throws -> T,
+    _ message: String = "",
+    file: StaticString = #filePath,
+    line: UInt = #line,
+    _ errorHandler: (Error) -> Void = { _ in }
+) async {
+    do {
+        _ = try await expression()
+        XCTFail("Expected an error to be thrown. \(message)", file: file, line: line)
+    } catch {
+        errorHandler(error)
+    }
+}
+
 // MARK: - BatchQueue
 //
 // Cycles through an array of response batches in order; the last batch repeats
@@ -47,8 +74,8 @@ private final class BatchQueue<T>: @unchecked Sendable {
 // MARK: - MockCalendarDelegate
 
 actor MockCalendarDelegate: CaptureEventDelegate {
-    private(set) var allEvents: [RawEvent] = []
-    func didCapture(_ events: [RawEvent]) async {
+    private(set) var allEvents: [CaptureEvent] = []
+    func didCapture(_ events: [CaptureEvent]) async {
         allEvents.append(contentsOf: events)
     }
 }
@@ -104,7 +131,7 @@ extension CalendarCaptureService.Environment {
     ///   - currentDate: Fixed or time-advancing clock.
     ///   - briefingCheckInterval: Shortened for tests (default 0.001 s).
     ///   - briefingLeadTime: Seconds before event start to fire briefing.
-    static func mock(
+    fileprivate static func mock(
         accessGranted:         Bool                                                             = true,
         accessError:           Error?                                                           = nil,
         eventBatches:          [[CalendarEventData]]                                            = [[]],
@@ -494,7 +521,7 @@ final class CalendarBriefingTests: XCTestCase {
 
         XCTAssertFalse(rec.values.isEmpty, "Briefing notification should have been posted")
         let name = rec.values.first?.0
-        XCTAssertEqual(name, .kerwanPreCallBriefingNeeded)
+        XCTAssertEqual(name, Notification.Name.kerwanPreCallBriefingNeeded)
     }
 
     func test_briefing_includesAttendeeEmails() async throws {

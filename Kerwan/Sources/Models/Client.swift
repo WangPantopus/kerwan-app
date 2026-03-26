@@ -11,6 +11,8 @@ import Foundation
 /// client creation when it detects repeated interactions with contacts from
 /// the same company domain.
 public struct Client: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: Client, rhs: Client) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 

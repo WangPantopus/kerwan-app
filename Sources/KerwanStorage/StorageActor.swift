@@ -1222,4 +1222,67 @@ public actor StorageActor {
     private func escapeSQL(_ s: String) -> String {
         s.replacingOccurrences(of: "'", with: "''")
     }
+
+    // MARK: - AppStorageService extensions
+
+    /// Returns the size of the primary database file in bytes.
+    ///
+    /// Used by `SettingsStorageService` to display storage usage in the Data tab.
+    /// Returns 0 if the file cannot be stat'd (e.g. in-memory test databases).
+    public func databaseFileSizeBytes() throws -> Int64 {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: dbPath) else {
+            return 0
+        }
+        return attrs[.size] as? Int64 ?? 0
+    }
+
+    /// Deletes raw events, interactions, and work sessions whose timestamps
+    /// fall strictly before `date`.
+    ///
+    /// Intended for the Settings "Delete data before…" control. Uses the same
+    /// cascade strategy as `pruneEventsOlderThan(days:)`.
+    public func deleteDataBefore(_ date: Date) throws {
+        let cutoff = date.timeIntervalSince1970
+        try writeConn.transaction {
+            try writeConn.execute("""
+                DELETE FROM interactions
+                WHERE started_at < \(cutoff)
+                """)
+            try writeConn.execute("""
+                DELETE FROM work_sessions
+                WHERE started_at < \(cutoff)
+                """)
+            try writeConn.execute("""
+                DELETE FROM raw_events
+                WHERE timestamp < \(cutoff)
+                  AND id NOT IN (SELECT event_id FROM interaction_events)
+                  AND id NOT IN (SELECT event_id FROM session_events)
+                """)
+        }
+        log.info("Deleted records before \(date)")
+    }
+
+    /// Returns the count of raw events recorded since midnight (local time).
+    public func countRawEventsToday() throws -> Int {
+        let midnight = Calendar.current.startOfDay(for: Date())
+        let ts = midnight.timeIntervalSince1970
+        let v: Int64? = try? reader.withConnection { conn in
+            try conn.scalar(
+                "SELECT count(*) FROM raw_events WHERE timestamp >= ?",
+                bindings: [.real(ts)]
+            )
+        }
+        return Int(v ?? 0)
+    }
+
+    /// Persists a user-authored manual note as a `documentAccess` source raw event.
+    public func insertManualNote(text: String, at date: Date) throws {
+        let event = RawEvent(
+            id:        UUID().uuidString,
+            timestamp: date,
+            source:    .documentAccess,
+            metadata:  text
+        )
+        try insertRawEvents([event])
+    }
 }

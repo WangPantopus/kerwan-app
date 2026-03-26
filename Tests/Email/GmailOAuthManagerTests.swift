@@ -17,6 +17,16 @@
 import XCTest
 @testable import Kerwan
 
+// MARK: - MutBox (strict-concurrency helper)
+
+/// Single-owner mutable box used in tests so `@Sendable` closures can mutate
+/// local state without triggering strict-concurrency errors.  Tests are
+/// single-threaded, so the absence of locking is safe.
+private final class MutBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ v: T) { self.value = v }
+}
+
 // MARK: - Shared reference-type recorders
 
 /// Thread-safe list for observing side-effecting calls (URL opens, etc.)
@@ -58,7 +68,7 @@ actor MockCallbackServer: OAuthCallbackServing {
 // MARK: - MockKeychain
 
 /// In-memory Keychain replacement.
-final class MockKeychain: KeychainManaging, @unchecked Sendable {
+final class MockKeychain: GmailKeychainManaging, @unchecked Sendable {
     private var store: [String: String] = [:]
     private let lock = NSLock()
 
@@ -148,7 +158,7 @@ extension GmailOAuthManager.Environment {
         let serverCapture = server
         let httpCapture   = http
         let keychainCapture = keychain
-        var currentEmails = initialEmails
+        let currentEmails = MutBox(initialEmails)
 
         return GmailOAuthManager.Environment(
             openURL: { url in openedURLRecorder.record(url) },
@@ -157,9 +167,9 @@ extension GmailOAuthManager.Environment {
             keychainSave:   { token, email in try keychainCapture.save(refreshToken: token, for: email) },
             keychainLoad:   { email in try keychainCapture.load(for: email) },
             keychainDelete: { email in try keychainCapture.delete(for: email) },
-            loadPersistedEmails: { currentEmails },
+            loadPersistedEmails: { currentEmails.value },
             persistEmails: { emails in
-                currentEmails = emails
+                currentEmails.value = emails
                 persistedEmailsRecorder.record(emails)
             },
             generateState: { state },
