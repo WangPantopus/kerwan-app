@@ -632,4 +632,57 @@ final class StorageActorTests: XCTestCase {
         // source database is SQLCipher-encrypted.
         throw XCTSkip("SQLCipher backup API not available on encrypted databases in CI")
     }
+
+    // MARK: - databaseFileSizeBytes
+
+    func test_databaseFileSizeBytes_returnsPositive() async throws {
+        let storage = try makeStorage()
+        // Insert some data so the database has a non-trivial size.
+        try await storage.insertRawEvents([RawEvent(source: .windowFocus, duration: 1)])
+        let sizeBytes = try await storage.databaseFileSizeBytes()
+        // A freshly migrated SQLite file must be at least one page (4096 bytes).
+        XCTAssertGreaterThan(sizeBytes, 0)
+    }
+
+    // MARK: - deleteDataBefore
+
+    func test_deleteDataBefore_removesOldRecords() async throws {
+        let storage = try makeStorage()
+        let old = Date(timeIntervalSince1970: 1_000_000)     // well in the past
+        let recent = Date()
+
+        // Insert an old interaction and a recent one.
+        let oldInteraction = Interaction(
+            type: .email, subject: "Old", startedAt: old, source: "test"
+        )
+        let newInteraction = Interaction(
+            type: .email, subject: "New", startedAt: recent, source: "test"
+        )
+        try await storage.insertInteraction(oldInteraction, linkedEventIds: [])
+        try await storage.insertInteraction(newInteraction, linkedEventIds: [])
+
+        // Cut off everything before 2 days ago — should remove oldInteraction only.
+        let cutoff = Date().addingTimeInterval(-2 * 86_400)
+        try await storage.deleteDataBefore(cutoff)
+
+        let remaining = await storage.fetchInteractions()
+        XCTAssertFalse(remaining.contains { $0.subject == "Old" },
+                       "Old interaction should have been deleted")
+        XCTAssertTrue(remaining.contains { $0.subject == "New" },
+                      "Recent interaction should be retained")
+    }
+
+    func test_deleteDataBefore_withFutureCutoff_removesAll() async throws {
+        let storage = try makeStorage()
+        let past = Date(timeIntervalSince1970: 1_000_000)
+        let interaction = Interaction(
+            type: .meeting, subject: "Past", startedAt: past, source: "test"
+        )
+        try await storage.insertInteraction(interaction, linkedEventIds: [])
+
+        // Cutting off at a future date removes everything.
+        try await storage.deleteDataBefore(Date().addingTimeInterval(86_400))
+        let remaining = await storage.fetchInteractions()
+        XCTAssertTrue(remaining.isEmpty)
+    }
 }
