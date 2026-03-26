@@ -24,11 +24,21 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - State
 
-    private(set) var vm = OnboardingViewModel()
+    private(set) var vm: OnboardingViewModel
     private var window: NSWindow?
 
     /// Called when the user finishes (or re-finishes) onboarding.
     var onComplete: (() -> Void)?
+
+    // MARK: - Init
+
+    /// Explicit initialiser avoids a Swift 5.10 LLVM IR-generation crash
+    /// (SmallVector overflow in DIExpression) that occurs when a complex
+    /// `@Observable` class is instantiated as a stored-property default value.
+    override init() {
+        vm = OnboardingViewModel()
+        super.init()
+    }
 
     // MARK: - Public API
 

@@ -24,6 +24,7 @@ struct MigrationRunner {
         let migrations: [(Int, () throws -> Void)] = [
             (1, migration_001),
             (2, migration_002),
+            (3, migration_003),
         ]
 
         for (version, migration) in migrations where version > current {
@@ -79,6 +80,58 @@ struct MigrationRunner {
         // at process startup, before any connection is opened. The vec0 virtual tables below
         // use CREATE VIRTUAL TABLE ... IF NOT EXISTS so unit tests on stock SQLite3 simply
         // fail silently at that step without crashing the migration.
+    }
+
+    // MARK: - migration_003
+
+    /// Adds the `digests` table for storing daily and weekly AI-generated digests.
+    ///
+    /// Columns:
+    /// - `id`:                      UUID primary key.
+    /// - `kind`:                    'daily' or 'weekly'.
+    /// - `generated_at`:            Unix timestamp when the digest was created.
+    /// - `title`:                   Short notification-banner title.
+    /// - `body_text`:               AI-generated or template narrative.
+    /// - `meeting_count`:           Meetings detected in the reference period.
+    /// - `email_count`:             Emails in the reference period.
+    /// - `slack_count`:             Slack messages in the reference period.
+    /// - `open_promise_count`:      Open promises at generation time.
+    /// - `unreviewed_session_count`:Work sessions awaiting billing review.
+    /// - `quiet_contact_names`:     JSON array of contact display names going quiet.
+    /// - `total_hours_tracked`:     Weekly only — total hours across all sessions.
+    /// - `estimated_billable_hours`:Weekly only — confirmed billable hours.
+    /// - `sessions_reviewed_count`: Weekly only — sessions moved to confirmed.
+    /// - `sessions_pending_count`:  Weekly only — sessions still suggested.
+    /// - `prior_week_billable_hours`:Weekly only — prior-week confirmed hours.
+    private func migration_003() throws {
+        try conn.execute("""
+            CREATE TABLE IF NOT EXISTS digests (
+                id                       TEXT PRIMARY KEY NOT NULL,
+                kind                     TEXT NOT NULL
+                                         CHECK(kind IN ('daily','weekly')),
+                generated_at             REAL NOT NULL,
+                title                    TEXT NOT NULL,
+                body_text                TEXT NOT NULL,
+                meeting_count            INTEGER NOT NULL DEFAULT 0,
+                email_count              INTEGER NOT NULL DEFAULT 0,
+                slack_count              INTEGER NOT NULL DEFAULT 0,
+                open_promise_count       INTEGER NOT NULL DEFAULT 0,
+                unreviewed_session_count INTEGER NOT NULL DEFAULT 0,
+                quiet_contact_names      TEXT NOT NULL DEFAULT '[]',
+                total_hours_tracked      REAL,
+                estimated_billable_hours REAL,
+                sessions_reviewed_count  INTEGER,
+                sessions_pending_count   INTEGER,
+                prior_week_billable_hours REAL
+            ) STRICT
+            """)
+
+        try conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_digests_kind         ON digests(kind)"
+        )
+        try conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_digests_generated_at ON digests(generated_at DESC)"
+        )
     }
 
     // MARK: - migration_002

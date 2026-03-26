@@ -1,6 +1,7 @@
 import AppKit
 import os
 import KerwanKeychain
+import KerwanStorage
 
 /// Platform-level application delegate bridged into the SwiftUI lifecycle via
 /// `@NSApplicationDelegateAdaptor` in `KerwanApp`.
@@ -181,12 +182,25 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
                 await notificationScheduler.scheduleDailyReminder(timeString: digestTime)
                 await notificationScheduler.scheduleWeeklyReminder(timeString: digestTime)
             }
-            // DigestGenerator starts its background loop. Inject concrete storage
-            // when the KerwanStorage workstream lands:
-            //   await digestGenerator.start(storage: storageActor, ...)
-            // For now the generator holds nil storage and will skip generation
-            // gracefully until injected.
-            _ = digestGenerator  // retain until injection
+
+            // Open the database and start the DigestGenerator background loop.
+            // The passphrase is retrieved from the keychain; if unavailable the
+            // generator falls back to nil storage and skips generation gracefully.
+            do {
+                let passphrase = try await keychain.databasePassphrase()
+                let storage    = try StorageActor(passphrase: passphrase)
+                await digestGenerator.start(
+                    storage:              storage,
+                    notificationScheduler: notificationScheduler,
+                    appState:             appState,
+                    digestTime:           digestTime
+                )
+            } catch {
+                Self.logger.warning(
+                    "DigestGenerator storage unavailable: \(error.localizedDescription, privacy: .public)"
+                )
+                // Generator holds nil storage and gracefully skips digest generation.
+            }
         }
 
         // Observe Today / Review Queue navigation requests from notifications.
