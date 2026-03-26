@@ -192,7 +192,9 @@ struct InteractionDetailView: View {
                 // Navigate to the Review Queue where associated work sessions are listed.
                 // Full interaction→session linking will be added when the billing engine
                 // exposes session IDs on the interaction record.
-                appState.selectedSidebarItem = .reviewQueue
+                Task { @MainActor in
+                    appState.selectedSidebarItem = .reviewQueue
+                }
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
