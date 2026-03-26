@@ -44,14 +44,13 @@ actor IntegrationSearchStorage: SearchEngineStorage {
     func keywordSearchInteractions(query: String, limit: Int) async throws -> [SearchResult] {
         let q = query.lowercased()
         return storedInteractions
-            .filter { ($0.summary?.lowercased().contains(q) ?? false)
-                   || ($0.subject?.lowercased().contains(q) ?? false) }
+            .filter { $0.summary?.lowercased().contains(q) ?? false }
             .prefix(limit)
             .map { interaction in
                 SearchResult(
                     id:             interaction.id,
                     type:           .interaction,
-                    title:          interaction.subject ?? "Untitled",
+                    title:          interaction.summary ?? "Untitled",
                     snippet:        interaction.summary ?? "",
                     timestamp:      interaction.startedAt,
                     relevanceScore: 0.9
@@ -62,15 +61,15 @@ actor IntegrationSearchStorage: SearchEngineStorage {
     func keywordSearchPromises(query: String, limit: Int) async throws -> [SearchResult] {
         let q = query.lowercased()
         return storedPromises
-            .filter { $0.text.lowercased().contains(q) }
+            .filter { $0.description.lowercased().contains(q) }
             .prefix(limit)
             .map { promise in
                 SearchResult(
                     id:             promise.id,
                     type:           .interaction,  // promises map to .interaction in SearchResult
-                    title:          promise.text,
-                    snippet:        promise.text,
-                    timestamp:      promise.createdAt,
+                    title:          promise.description,
+                    snippet:        promise.description,
+                    timestamp:      promise.extractedAt,
                     relevanceScore: 0.8
                 )
             }
@@ -82,14 +81,18 @@ actor IntegrationSearchStorage: SearchEngineStorage {
         embedding: [Float],
         limit: Int
     ) async throws -> [(interactionId: EntityID, distance: Float)] {
-        storedInteractions.prefix(limit).map { (interactionId: $0.id, distance: Float(0.1)) }
+        // A zero vector carries no semantic signal — return nothing so keyword-only
+        // misses stay empty (e.g. test_search_keyword_noMatch_returnsEmpty).
+        guard embedding.contains(where: { $0 != 0 }) else { return [] }
+        return storedInteractions.prefix(limit).map { (interactionId: $0.id, distance: Float(0.1)) }
     }
 
     func vectorSearchPromises(
         embedding: [Float],
         limit: Int
     ) async throws -> [(promiseId: EntityID, distance: Float)] {
-        storedPromises.prefix(limit).map { (promiseId: $0.id, distance: Float(0.1)) }
+        guard embedding.contains(where: { $0 != 0 }) else { return [] }
+        return storedPromises.prefix(limit).map { (promiseId: $0.id, distance: Float(0.1)) }
     }
 
     // MARK: - SearchEngineStorage: enrichment
@@ -117,7 +120,7 @@ actor IntegrationSearchStorage: SearchEngineStorage {
                 SearchResult(
                     id:             i.id,
                     type:           .interaction,
-                    title:          i.subject ?? "Interaction",
+                    title:          i.summary ?? "Interaction",
                     snippet:        i.summary ?? "",
                     timestamp:      i.startedAt,
                     relevanceScore: 0.7
@@ -134,14 +137,14 @@ actor IntegrationSearchStorage: SearchEngineStorage {
             .filter { dateRange.contains($0.startedAt) }
             .filter { i in
                 guard let types = interactionTypes else { return true }
-                return types.contains(i.type)
+                return types.contains(i.interactionType)
             }
             .prefix(limit)
             .map { i in
                 SearchResult(
                     id:             i.id,
                     type:           .interaction,
-                    title:          i.subject ?? "Interaction",
+                    title:          i.summary ?? "Interaction",
                     snippet:        i.summary ?? "",
                     timestamp:      i.startedAt,
                     relevanceScore: 0.75
@@ -161,9 +164,9 @@ actor IntegrationSearchStorage: SearchEngineStorage {
                 SearchResult(
                     id:             p.id,
                     type:           .interaction,
-                    title:          p.text,
-                    snippet:        p.text,
-                    timestamp:      p.createdAt,
+                    title:          p.description,
+                    snippet:        p.description,
+                    timestamp:      p.extractedAt,
                     relevanceScore: 0.8
                 )
             }
@@ -192,14 +195,26 @@ actor IntegrationSearchStorage: SearchEngineStorage {
 // MARK: - In-memory EmbeddingStorage (for EmbeddingService)
 
 actor IntegrationEmbeddingStorage: EmbeddingServiceStorage {
-    private var cache: [String: [Float]] = [:]
+    private var interactionEmbeddings: [String: [[Float]]] = [:]
+    private var rawEventEmbeddings:    [String: [Float]]   = [:]
+    private var promiseEmbeddings:     [String: [Float]]   = [:]
 
-    func storedEmbedding(forText text: String) async throws -> [Float]? {
-        cache[text]
+    func listUnembeddedInteractions() async throws -> [Interaction] { [] }
+
+    func insertVectorEmbedding(interactionId: EntityID, embedding: [Float]) async throws {
+        interactionEmbeddings[interactionId, default: []].append(embedding)
     }
 
-    func storeEmbedding(_ embedding: [Float], forText text: String) async throws {
-        cache[text] = embedding
+    func listUnembeddedRawEvents(sources: [EventSource]) async throws -> [RawEvent] { [] }
+
+    func insertRawEventEmbedding(rawEventId: EntityID, chunkIndex: Int, embedding: [Float]) async throws {
+        rawEventEmbeddings[rawEventId] = embedding
+    }
+
+    func listUnembeddedPromises() async throws -> [Promise] { [] }
+
+    func insertPromiseEmbedding(promiseId: EntityID, embedding: [Float]) async throws {
+        promiseEmbeddings[promiseId] = embedding
     }
 }
 
@@ -247,7 +262,7 @@ final class SearchIntegrationTests: XCTestCase {
 
     private func makeInteraction(
         id:      String = UUID().uuidString,
-        subject: String,
+        subject: String = "",
         summary: String,
         date:    Date,
         type:    InteractionType = .meeting,
@@ -255,13 +270,13 @@ final class SearchIntegrationTests: XCTestCase {
         clientId:  String? = nil
     ) -> Interaction {
         Interaction(
-            id:        id,
-            contactId: contactId,
-            clientId:  clientId,
-            type:      type,
-            subject:   subject,
-            summary:   summary,
-            startedAt: date
+            id:              id,
+            contactId:       contactId,
+            clientId:        clientId,
+            source:          .email,
+            interactionType: type,
+            startedAt:       date,
+            summary:         summary.isEmpty ? subject : summary
         )
     }
 
@@ -429,11 +444,12 @@ final class SearchIntegrationTests: XCTestCase {
 
     func test_search_openPromises_returnedByTargetedQuery() async throws {
         let promise = Promise(
-            id:        "p-001",
-            contactId: "c-001",
-            text:      "Send the design brief by Friday",
-            status:    .open,
-            createdAt: baseDate
+            id:          "p-001",
+            contactId:   "c-001",
+            direction:   .userPromised,
+            description: "Send the design brief by Friday",
+            status:      .open,
+            extractedAt: baseDate
         )
         await storage.seed(promises: [promise])
 

@@ -72,18 +72,14 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
         let drained = await buffer.drain(cursor: .storage, maxCount: 10)
         XCTAssertEqual(drained.count, 2)
 
-        try storage.insertRawEvents(drained)
+        try await storage.insertRawEvents(drained)
 
-        // Confirm both events are in the DB.
-        let stored = storage.fetchRawEvents(sessionId: "")  // returns empty — no session link
-        // Use a direct count query instead.
-        let interactions = storage.fetchInteractions()      // nothing yet
+        // Confirm no interactions exist yet (only raw events).
+        let interactions = await storage.fetchInteractions()
         XCTAssertTrue(interactions.isEmpty, "No interactions should exist yet (only raw events)")
 
-        // Verify via a round-trip through the storage API we have access to.
         // insertRawEvents uses INSERT OR IGNORE, so inserting again should be idempotent.
-        try storage.insertRawEvents(drained)     // no-op
-        _ = stored  // suppress unused warning
+        try await storage.insertRawEvents(drained)     // no-op
     }
 
     // MARK: - Buffer → Storage: field fidelity
@@ -107,11 +103,9 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
             emails:      #"["alice@example.com"]"#
         )
 
-        try storage.insertRawEvents([event])
+        try await storage.insertRawEvents([event])
 
-        // Contact / interaction rows can verify indirectly that the event was stored.
-        // Here we verify the session linkage path by inserting a dummy WorkSession and
-        // linking the raw event.
+        // Verify the session linkage path by inserting a dummy WorkSession and linking the raw event.
         let session = WorkSession(
             id:              UUID().uuidString,
             clientId:        nil,
@@ -120,9 +114,9 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
             durationSeconds: 3_600,
             billable:        .undecided
         )
-        try storage.insertWorkSession(session, linkedEventIds: [eventId])
+        try await storage.insertWorkSession(session, linkedEventIds: [eventId])
 
-        let linked = storage.fetchRawEvents(sessionId: session.id)
+        let linked = await storage.fetchRawEvents(sessionId: session.id)
         XCTAssertEqual(linked.count, 1)
 
         let fetched = linked[0]
@@ -205,16 +199,18 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
 
         let rule1 = ExclusionRule(type: .app,    value: "1Password")
         let rule2 = ExclusionRule(type: .domain, value: "bank.com")
-        try storage.insertExclusionRule(rule1)
-        try storage.insertExclusionRule(rule2)
+        try await storage.insertExclusionRule(rule1)
+        try await storage.insertExclusionRule(rule2)
 
-        let fetched = storage.fetchExclusionRules()
-        XCTAssertEqual(fetched.count, 2)
+        let fetched = await storage.fetchExclusionRules()
+        // The DB is seeded with default exclusion rules (e.g., 1Password, Keychain Access);
+        // assert that at least the 2 we inserted are present.
+        XCTAssertGreaterThanOrEqual(fetched.count, 2)
 
-        let apps    = fetched.filter { $0.type == .app }
-        let domains = fetched.filter { $0.type == .domain }
-        XCTAssertEqual(apps.first?.value,    "1Password")
-        XCTAssertEqual(domains.first?.value, "bank.com")
+        let apps    = fetched.filter { $0.type == .app    && $0.value == "1Password" }
+        let domains = fetched.filter { $0.type == .domain && $0.value == "bank.com"  }
+        XCTAssertFalse(apps.isEmpty,    "1Password app rule must be present")
+        XCTAssertFalse(domains.isEmpty, "bank.com domain rule must be present")
     }
 
     // MARK: - Exclusion: events for excluded apps are not captured
@@ -226,9 +222,9 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
         let storage = try makeStorage()
 
         let excludedApp = "1Password"
-        try storage.insertExclusionRule(ExclusionRule(type: .app, value: excludedApp))
+        try await storage.insertExclusionRule(ExclusionRule(type: .app, value: excludedApp))
 
-        let rules = storage.fetchExclusionRules()
+        let rules = await storage.fetchExclusionRules()
         let excludedApps = Set(rules.filter { $0.type == .app }.map(\.value))
 
         let buffer = RawEventBuffer(registerDefaultCursor: true)
@@ -259,14 +255,14 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
             displayName:  "Alice Smith",
             emailPrimary: "alice@example.com"
         )
-        try storage.upsertContact(contact)
+        try await storage.upsertContact(contact)
 
-        let fetched = storage.fetchContactByEmail("alice@example.com")
+        let fetched = await storage.fetchContactByEmail("alice@example.com")
         XCTAssertNotNil(fetched)
         XCTAssertEqual(fetched?.displayName, "Alice Smith")
 
         // Case-insensitive lookup.
-        let caseInsensitive = storage.fetchContactByEmail("ALICE@EXAMPLE.COM")
+        let caseInsensitive = await storage.fetchContactByEmail("ALICE@EXAMPLE.COM")
         XCTAssertNotNil(caseInsensitive)
     }
 
@@ -279,14 +275,14 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
 
         let eventId = UUID().uuidString
         let rawEvt = makeEvent(id: eventId, source: .emailCapture, sourceApp: "Mail")
-        try storage.insertRawEvents([rawEvt])
+        try await storage.insertRawEvents([rawEvt])
 
         let contact = Contact(
             id:           UUID().uuidString,
             displayName:  "Bob Jones",
             emailPrimary: "bob@acme.com"
         )
-        try storage.upsertContact(contact)
+        try await storage.upsertContact(contact)
 
         let interaction = Interaction(
             id:        UUID().uuidString,
@@ -296,9 +292,9 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
             startedAt: Date(),
             source:    "emailCapture"
         )
-        try storage.insertInteraction(interaction, linkedEventIds: [eventId])
+        try await storage.insertInteraction(interaction, linkedEventIds: [eventId])
 
-        let fetched = storage.fetchInteractions(contactId: contact.id)
+        let fetched = await storage.fetchInteractions(contactId: contact.id)
         XCTAssertEqual(fetched.count, 1)
         XCTAssertEqual(fetched[0].subject, "Q3 Kickoff")
     }
@@ -311,15 +307,18 @@ final class CaptureToStorageIntegrationTests: XCTestCase {
         let storage = try makeStorage()
 
         let contact = Contact(id: UUID().uuidString, displayName: "Temp", emailPrimary: "t@t.com")
-        try storage.upsertContact(contact)
-        XCTAssertFalse(storage.fetchAllContacts().isEmpty)
+        try await storage.upsertContact(contact)
+        let beforeContacts = await storage.fetchAllContacts()
+        XCTAssertFalse(beforeContacts.isEmpty)
 
-        try storage.deleteAllData()
+        try await storage.deleteAllData()
 
-        XCTAssertTrue(storage.fetchAllContacts().isEmpty, "All contacts must be gone after deleteAllData")
+        let afterContacts = await storage.fetchAllContacts()
+        XCTAssertTrue(afterContacts.isEmpty, "All contacts must be gone after deleteAllData")
 
         // DB must still accept new writes after reset.
-        try storage.upsertContact(contact)
-        XCTAssertEqual(storage.fetchAllContacts().count, 1)
+        try await storage.upsertContact(contact)
+        let resetContacts = await storage.fetchAllContacts()
+        XCTAssertEqual(resetContacts.count, 1)
     }
 }

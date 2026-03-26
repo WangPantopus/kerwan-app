@@ -63,13 +63,12 @@ actor CombinedPipelineStorage: ClassificationStorage, SearchEngineStorage {
         let q = query.lowercased()
         return Array(
             interactions.values
-                .filter { ($0.summary?.lowercased().contains(q) ?? false)
-                       || ($0.subject?.lowercased().contains(q) ?? false) }
+                .filter { $0.summary?.lowercased().contains(q) ?? false }
                 .prefix(limit)
                 .map { i in
                     SearchResult(
                         id: i.id, type: .interaction,
-                        title: i.subject ?? "Interaction",
+                        title: i.summary ?? "Interaction",
                         snippet: i.summary ?? "",
                         timestamp: i.startedAt,
                         relevanceScore: 0.9
@@ -82,13 +81,13 @@ actor CombinedPipelineStorage: ClassificationStorage, SearchEngineStorage {
         let q = query.lowercased()
         return Array(
             promises.values
-                .filter { $0.text.lowercased().contains(q) }
+                .filter { $0.description.lowercased().contains(q) }
                 .prefix(limit)
                 .map { p in
                     SearchResult(
                         id: p.id, type: .interaction,
-                        title: p.text, snippet: p.text,
-                        timestamp: p.createdAt,
+                        title: p.description, snippet: p.description,
+                        timestamp: p.extractedAt,
                         relevanceScore: 0.8
                     )
                 }
@@ -128,7 +127,7 @@ actor CombinedPipelineStorage: ClassificationStorage, SearchEngineStorage {
                 .map { i in
                     SearchResult(
                         id: i.id, type: .interaction,
-                        title: i.subject ?? "Interaction",
+                        title: i.summary ?? "Interaction",
                         snippet: i.summary ?? "",
                         timestamp: i.startedAt,
                         relevanceScore: 0.7
@@ -149,7 +148,7 @@ actor CombinedPipelineStorage: ClassificationStorage, SearchEngineStorage {
                 .map { i in
                     SearchResult(
                         id: i.id, type: .interaction,
-                        title: i.subject ?? "Interaction",
+                        title: i.summary ?? "Interaction",
                         snippet: i.summary ?? "",
                         timestamp: i.startedAt,
                         relevanceScore: 0.75
@@ -170,8 +169,8 @@ actor CombinedPipelineStorage: ClassificationStorage, SearchEngineStorage {
                 .map { p in
                     SearchResult(
                         id: p.id, type: .interaction,
-                        title: p.text, snippet: p.text,
-                        timestamp: p.createdAt,
+                        title: p.description, snippet: p.description,
+                        timestamp: p.extractedAt,
                         relevanceScore: 0.8
                     )
                 }
@@ -288,13 +287,13 @@ final class EndToEndSmokeTests: XCTestCase {
             eventIds.append(eid)
             classificationArray.append([
                 "id": eid,
-                "contact_names": ["User \(i)"],
+                "contact_names": [String]() as Any,   // no names — email is the sole identifier
                 "contact_emails": ["user\(i)@example.com"],
                 "client_guess": NSNull(),
                 "project_guess": NSNull(),
                 "content_types": ["appFocus"],
                 "direction": "inbound",
-                "promises": [],
+                "promises": [String]() as Any,
                 "topics": ["work"],
                 "billable": "no",
                 "importance": "low",
@@ -307,11 +306,12 @@ final class EndToEndSmokeTests: XCTestCase {
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
         registerOllama(classificationResult: jsonString)
 
-        let events = eventIds.map { eid in
-            RawEvent(id: eid, source: .appFocus, startedAt: Date(),
-                     rawText: "Focus event \(eid)")
+        // Give each event a distinct sourceApp so mergeAppFocusRuns keeps them separate.
+        let events = eventIds.enumerated().map { (i, eid) in
+            RawEvent(id: eid, source: .appFocus, sourceApp: "App\(i)",
+                     startedAt: Date(), rawText: "Focus event \(eid)")
         }
-        classificationActor.enqueue(events)
+        await classificationActor.enqueue(events)
         await classificationActor.runClassificationCycle()
 
         let contacts = await pipelineStorage.contacts
@@ -336,7 +336,7 @@ final class EndToEndSmokeTests: XCTestCase {
 
         let event = RawEvent(id: eventId, source: .email, startedAt: Date(),
                              rawText: "Hi, here is the Q3 budget proposal.")
-        classificationActor.enqueue([event])
+        await classificationActor.enqueue([event])
         await classificationActor.runClassificationCycle()
 
         // Ensure the interaction is in storage before searching.
@@ -382,7 +382,7 @@ final class EndToEndSmokeTests: XCTestCase {
             startedAt: Date(),
             rawText:  "Bob: Can you send me the project report by Friday? Me: Sure, I will."
         )
-        classificationActor.enqueue([event])
+        await classificationActor.enqueue([event])
         await classificationActor.runClassificationCycle()
 
         let contacts = await pipelineStorage.contacts
@@ -395,7 +395,7 @@ final class EndToEndSmokeTests: XCTestCase {
 
         let promises = await pipelineStorage.promises
         XCTAssertEqual(promises.count, 1, "Exactly one promise must be extracted")
-        XCTAssertTrue(promises.values.first?.text.contains("report") == true,
+        XCTAssertTrue(promises.values.first?.description.contains("report") == true,
                       "Promise text must mention 'report'")
 
         let interaction = interactions.values.first!
@@ -431,7 +431,7 @@ final class EndToEndSmokeTests: XCTestCase {
             RawEvent(id: "excl-3",    source: .appFocus, startedAt: Date(), isExcluded: true),
         ]
 
-        classificationActor.enqueue(events)
+        await classificationActor.enqueue(events)
 
         let pendingAfterEnqueue = await classificationActor.pendingEventCount
         XCTAssertEqual(pendingAfterEnqueue, 2, "Only 2 non-excluded events must be in the queue")
@@ -471,7 +471,7 @@ final class EndToEndSmokeTests: XCTestCase {
         let events = [id1, id2, id3].map { eid in
             RawEvent(id: eid, source: .audio, startedAt: Date(), rawText: "Transcript \(eid)")
         }
-        classificationActor.enqueue(events)
+        await classificationActor.enqueue(events)
         await classificationActor.runClassificationCycle()
 
         // Confirm 3 interactions were stored.
@@ -511,7 +511,7 @@ final class EndToEndSmokeTests: XCTestCase {
             RawEvent(id: "evt-down-\(i)", source: .email, startedAt: Date(),
                      rawText: "Some email \(i)")
         }
-        classificationActor.enqueue(events)
+        await classificationActor.enqueue(events)
         await classificationActor.runClassificationCycle()
 
         let remaining = await classificationActor.pendingEventCount

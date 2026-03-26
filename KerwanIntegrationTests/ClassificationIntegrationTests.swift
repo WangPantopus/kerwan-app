@@ -31,10 +31,10 @@ final class IntegrationMockOllamaURLProtocol: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         let path = request.url?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
-        let handler: Handler = Self.lock.withLock {
+        let handler: Handler = Self.lock.withLock { () -> Handler in
             Self._handlers[path]
                 ?? Self._handlers[String(path.split(separator: "/").last ?? Substring(path))]
-                ?? { _ in (404, Data(#"{"error":"no handler"}"#.utf8)) }
+                ?? { (_: URLRequest) -> (Int, Data) in (404, Data(#"{"error":"no handler"}"#.utf8)) }
         }
         let (code, data) = handler(request)
         let response = HTTPURLResponse(
@@ -211,7 +211,7 @@ final class ClassificationIntegrationTests: XCTestCase {
             startedAt: Date(),
             rawText:   "Alice and I reviewed the Q2 roadmap for Acme Corp."
         )
-        actor.enqueue([event])
+        await actor.enqueue([event])
         await actor.runClassificationCycle()
 
         let interactions = await storage.interactions
@@ -248,13 +248,13 @@ final class ClassificationIntegrationTests: XCTestCase {
         let actor = ClassificationActor(client: client, storage: storage)
         let event = RawEvent(id: eventId, source: .email, startedAt: Date(),
                              rawText: "Alice asked me to send the project brief.")
-        actor.enqueue([event])
+        await actor.enqueue([event])
         await actor.runClassificationCycle()
 
         let promises = await storage.promises
         XCTAssertEqual(promises.count, 1, "One promise must be extracted and stored")
         XCTAssertTrue(
-            promises.values.first?.text.contains("Send project brief") == true,
+            promises.values.first?.description.contains("Send project brief") == true,
             "Promise text must match the extracted description"
         )
     }
@@ -279,7 +279,7 @@ final class ClassificationIntegrationTests: XCTestCase {
         let actor = ClassificationActor(client: client, storage: storage)
         let event = RawEvent(id: eventId, source: .audio, startedAt: Date(),
                              rawText: "Design review with Bob.")
-        actor.enqueue([event])
+        await actor.enqueue([event])
         await actor.runClassificationCycle()
 
         let embeddings = await storage.embeddings
@@ -305,7 +305,7 @@ final class ClassificationIntegrationTests: XCTestCase {
         let actor = ClassificationActor(client: client, storage: storage)
         let excluded = RawEvent(id: UUID().uuidString, source: .appFocus, startedAt: Date(),
                                 isExcluded: true)
-        actor.enqueue([excluded])
+        await actor.enqueue([excluded])
 
         let pending = await actor.pendingEventCount
         XCTAssertEqual(pending, 0, "Excluded event must be dropped by enqueue")
@@ -320,8 +320,8 @@ final class ClassificationIntegrationTests: XCTestCase {
         let eventId = UUID().uuidString
         let event   = RawEvent(id: eventId, source: .email, startedAt: Date())
 
-        actor.enqueue([event])
-        actor.enqueue([event])   // exact duplicate
+        await actor.enqueue([event])
+        await actor.enqueue([event])   // exact duplicate
 
         let count = await actor.pendingEventCount
         XCTAssertEqual(count, 1, "Duplicate event IDs must be deduplicated in the pending queue")
@@ -340,7 +340,7 @@ final class ClassificationIntegrationTests: XCTestCase {
         let actor = ClassificationActor(client: client, storage: storage)
         let event = RawEvent(id: UUID().uuidString, source: .audio, startedAt: Date(),
                              rawText: "Could not connect.")
-        actor.enqueue([event])
+        await actor.enqueue([event])
         await actor.runClassificationCycle()
 
         let remaining = await actor.pendingEventCount
@@ -378,7 +378,7 @@ final class ClassificationIntegrationTests: XCTestCase {
         let actor = ClassificationActor(client: client, storage: storage)
         let e1 = RawEvent(id: id1, source: .audio, startedAt: Date(), rawText: "Call with user1.")
         let e2 = RawEvent(id: id2, source: .email, startedAt: Date(), rawText: "Email from user2.")
-        actor.enqueue([e1, e2])
+        await actor.enqueue([e1, e2])
         await actor.runClassificationCycle()
 
         // After one cycle at most 50 events are processed; both should be classified.
@@ -408,7 +408,7 @@ final class ClassificationIntegrationTests: XCTestCase {
         let actor = ClassificationActor(client: client, storage: storage)
         let event = RawEvent(id: eventId, source: .audio, startedAt: Date(),
                              rawText: "Met with Acme Corp team.")
-        actor.enqueue([event])
+        await actor.enqueue([event])
         await actor.runClassificationCycle()
 
         let interactions = await storage.interactions
@@ -434,7 +434,7 @@ final class ClassificationIntegrationTests: XCTestCase {
 
         let actor = ClassificationActor(client: client, storage: storage)
         let event = RawEvent(id: UUID().uuidString, source: .email, startedAt: Date())
-        actor.enqueue([event])
+        await actor.enqueue([event])
         // Must not throw even on malformed response.
         await actor.runClassificationCycle()
 
