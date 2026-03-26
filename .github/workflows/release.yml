@@ -5,18 +5,21 @@
 #
 # Pipeline steps
 #   1.  Set version from tag
-#   2.  Inject version into Info.plist
-#   3.  Import Developer ID certificate into a throw-away keychain
-#   4.  Resolve / build / archive with xcodebuild
-#   5.  Export Developer-ID-signed .app
-#   6.  Notarize .app, staple ticket
-#   7.  Generate DMG background image
-#   8.  Create DMG (create-dmg)
-#   9.  Sign & notarize DMG, staple ticket
-#   10. Compute Sparkle EdDSA signature
-#   11. Upload DMG to Cloudflare R2
-#   12. Update appcast.xml, upload to R2
-#   13. Create GitHub Release with DMG attached
+#   2.  Select Xcode / install build tools
+#   3.  Inject version into Info.plist
+#   4.  Import Developer ID certificate into a throw-away keychain
+#   5.  Resolve SPM dependencies
+#   6.  Generate ExportOptions.plist
+#   7.  xcodebuild archive (Release, hardened runtime, timestamp)
+#   8.  xcodebuild export (Developer-ID-signed .app)
+#   9.  Notarize .app, staple ticket
+#   10. Generate DMG background + create DMG
+#   11. Sign & notarize DMG, staple ticket
+#   12. Compute Sparkle EdDSA signature
+#   13. Fetch current appcast.xml from R2 (so previous items are preserved)
+#   14. Prepend new item to appcast.xml, upload to R2
+#   15. Upload DMG to R2
+#   16. Create GitHub Release with DMG + appcast attached
 #
 # Required GitHub Secrets
 #   APPLE_CERTIFICATE_P12          Base64-encoded Developer ID .p12 bundle
@@ -29,7 +32,7 @@
 #   R2_ACCOUNT_ID                  Cloudflare account ID
 #   R2_ACCESS_KEY_ID               R2 API token key ID
 #   R2_SECRET_ACCESS_KEY           R2 API token secret
-#   R2_BUCKET                      R2 bucket name  (e.g. kerwan-releases)
+#   R2_BUCKET                      R2 bucket name (e.g. kerwan-releases)
 #   DOWNLOAD_BASE_URL              Public base URL for downloads
 #                                  (e.g. https://releases.kerwan.app/releases)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -50,7 +53,6 @@ jobs:
     timeout-minutes: 90
 
     env:
-      # Resolved once so every step can reference $VERSION / $BUILD_NUMBER
       ARCHIVE_PATH: ${{ github.workspace }}/build/Kerwan.xcarchive
       EXPORT_DIR:   ${{ github.workspace }}/build/export
 
@@ -59,7 +61,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history — used for build-number calculation
+          fetch-depth: 0   # full history for build-number calculation
 
       # ── 2. Version ───────────────────────────────────────────────────────
       - name: Derive version numbers
@@ -71,14 +73,14 @@ jobs:
           IS_PRERELEASE="false"
           [[ "$TAG" == *"-"* ]] && IS_PRERELEASE="true"
 
-          echo "tag=$TAG"             >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION"     >> "$GITHUB_OUTPUT"
-          echo "build=$BUILD"         >> "$GITHUB_OUTPUT"
-          echo "prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-          echo "dmg=Kerwan-${VERSION}.dmg" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"                      >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"              >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD"                  >> "$GITHUB_OUTPUT"
+          echo "prerelease=$IS_PRERELEASE"     >> "$GITHUB_OUTPUT"
+          echo "dmg=Kerwan-${VERSION}.dmg"     >> "$GITHUB_OUTPUT"
 
-          echo "VERSION=$VERSION"     >> "$GITHUB_ENV"
-          echo "BUILD_NUMBER=$BUILD"  >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION"              >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD"           >> "$GITHUB_ENV"
           echo "DMG_NAME=Kerwan-${VERSION}.dmg" >> "$GITHUB_ENV"
 
           echo "▸ Tag: $TAG  Version: $VERSION  Build: $BUILD"
@@ -96,17 +98,21 @@ jobs:
       - name: Install build tools
         run: |
           brew install sqlcipher create-dmg imagemagick
-          echo "PKG_CONFIG_PATH=$(brew --prefix sqlcipher)/lib/pkgconfig:$PKG_CONFIG_PATH" \
+          echo "PKG_CONFIG_PATH=$(brew --prefix sqlcipher)/lib/pkgconfig:${PKG_CONFIG_PATH:-}" \
             >> "$GITHUB_ENV"
+          # Verify AWS CLI is available (pre-installed on macOS runners)
+          aws --version
 
-      # ── 4. Inject version into Info.plist ─────────────────────────────
+      # ── 4. Inject version into Info.plist ────────────────────────────────
       - name: Update Info.plist version
         run: |
           PLIST="Kerwan/Resources/Info.plist"
-          /usr/libexec/PlistBuddy -c \
-            "Set :CFBundleShortVersionString $VERSION" "$PLIST"
-          /usr/libexec/PlistBuddy -c \
-            "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST"
+          if [[ ! -f "$PLIST" ]]; then
+            echo "::error::Info.plist not found at $PLIST"
+            exit 1
+          fi
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER"       "$PLIST"
           echo "▸ Bundle version: $VERSION ($BUILD_NUMBER)"
 
       # ── 5. Import Developer ID certificate ───────────────────────────────
@@ -144,10 +150,12 @@ jobs:
 
       # ── 8. Archive ────────────────────────────────────────────────────────
       - name: xcodebuild archive
+        timeout-minutes: 40
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           mkdir -p build
+          set -o pipefail
 
           xcodebuild \
             -scheme Kerwan \
@@ -161,68 +169,64 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             SKIP_INSTALL=NO \
             archive \
-            2>&1 | tee build/xcodebuild-archive.log \
-            | grep -E "^(error:|warning:|note:|Build |Archive |\/)" \
-            || true
+            2>&1 | tee build/xcodebuild-archive.log | \
+              grep -E "^(error:|warning:|note:|Build |Archive |\/)" || true
 
-          # Verify archive was produced
           if [[ ! -d "$ARCHIVE_PATH" ]]; then
-            echo "::error::Archive not found at $ARCHIVE_PATH"
-            cat build/xcodebuild-archive.log | grep -A5 "error:" || true
+            echo "::error::Archive not found at $ARCHIVE_PATH — xcodebuild may have failed"
+            grep -A 5 "error:" build/xcodebuild-archive.log || true
             exit 1
           fi
           echo "▸ Archive: $ARCHIVE_PATH"
 
       # ── 9. Export ─────────────────────────────────────────────────────────
       - name: xcodebuild export
+        timeout-minutes: 10
         run: |
           mkdir -p "$EXPORT_DIR"
+          set -o pipefail
 
           xcodebuild \
             -exportArchive \
             -archivePath "$ARCHIVE_PATH" \
             -exportOptionsPlist ExportOptions.plist \
             -exportPath "$EXPORT_DIR" \
-            2>&1 | tee build/xcodebuild-export.log \
-            | grep -E "^(error:|warning:|Export )" \
-            || true
+            2>&1 | tee build/xcodebuild-export.log | \
+              grep -E "^(error:|warning:|Export )" || true
 
           APP_PATH=$(find "$EXPORT_DIR" -name "Kerwan.app" -maxdepth 2 | head -1)
           if [[ -z "$APP_PATH" ]]; then
             echo "::error::Kerwan.app not found in $EXPORT_DIR"
-            cat build/xcodebuild-export.log | grep -A5 "error:" || true
+            grep -A 5 "error:" build/xcodebuild-export.log || true
             exit 1
           fi
 
           echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
           echo "▸ Exported: $APP_PATH"
 
-          # Verify signature
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
       # ── 10. Notarize .app ─────────────────────────────────────────────────
       - name: Notarize .app
+        timeout-minutes: 25
         env:
-          APPLE_ID:                   ${{ secrets.APPLE_ID }}
+          APPLE_ID:                    ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_TEAM_ID:               ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # Zip the .app for submission (notarytool accepts .app directly in
-          # Xcode 14+ but a zip is safer across runner Xcode versions)
           ditto -c -k --keepParent "$APP_PATH" build/Kerwan-notarize.zip
 
-          echo "▸ Submitting for notarization…"
+          echo "▸ Submitting .app for notarization…"
           xcrun notarytool submit build/Kerwan-notarize.zip \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait \
-            --timeout 30m \
+            --timeout 20m \
             2>&1 | tee build/notarize-app.log
 
-          # Fail the job if notarization was rejected
-          if grep -qi "status: Invalid\|status: Rejected" build/notarize-app.log; then
-            echo "::error::Notarization rejected"
+          if grep -qiE "status: (Invalid|Rejected)" build/notarize-app.log; then
+            echo "::error::Notarization rejected — see build/notarize-app.log"
             exit 1
           fi
 
@@ -243,6 +247,10 @@ jobs:
             "$DMG_NAME" \
             build/dmg-background.png
 
+          if [[ ! -f "$DMG_NAME" ]]; then
+            echo "::error::DMG not created: $DMG_NAME"
+            exit 1
+          fi
           ls -lh "$DMG_NAME"
           echo "DMG_PATH=$PWD/$DMG_NAME" >> "$GITHUB_ENV"
 
@@ -252,6 +260,10 @@ jobs:
           CERT_NAME=$(security find-identity -v -p codesigning build.keychain \
             | grep "Developer ID Application" | head -1 \
             | sed 's/.*"\(.*\)"/\1/')
+          if [[ -z "$CERT_NAME" ]]; then
+            echo "::error::Developer ID Application cert not found in build.keychain"
+            exit 1
+          fi
           echo "▸ Signing with: $CERT_NAME"
           codesign \
             --sign "$CERT_NAME" \
@@ -261,6 +273,7 @@ jobs:
           codesign --verify --verbose "$DMG_NAME"
 
       - name: Notarize DMG
+        timeout-minutes: 25
         env:
           APPLE_ID:                    ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -272,11 +285,11 @@ jobs:
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait \
-            --timeout 30m \
+            --timeout 20m \
             2>&1 | tee build/notarize-dmg.log
 
-          if grep -qi "status: Invalid\|status: Rejected" build/notarize-dmg.log; then
-            echo "::error::DMG notarization rejected"
+          if grep -qiE "status: (Invalid|Rejected)" build/notarize-dmg.log; then
+            echo "::error::DMG notarization rejected — see build/notarize-dmg.log"
             exit 1
           fi
 
@@ -286,7 +299,115 @@ jobs:
           xcrun stapler validate "$DMG_NAME"
           echo "▸ Stapled: $DMG_NAME"
 
-      # ── 13. Upload DMG to Cloudflare R2 ───────────────────────────────────
+      # ── 13. Compute Sparkle EdDSA signature ──────────────────────────────
+      - name: Compute EdDSA signature
+        id: sparkle
+        env:
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          SPARKLE_VER="2.6.4"
+          echo "▸ Downloading Sparkle ${SPARKLE_VER} tools…"
+          curl -fsSL \
+            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VER}/Sparkle-${SPARKLE_VER}.tar.xz" \
+            -o /tmp/sparkle.tar.xz
+          mkdir -p /tmp/sparkle
+          tar -xJf /tmp/sparkle.tar.xz -C /tmp/sparkle
+
+          SIGN_UPDATE_BIN="/tmp/sparkle/bin/sign_update"
+          if [[ ! -x "$SIGN_UPDATE_BIN" ]]; then
+            echo "::error::sign_update binary not found at $SIGN_UPDATE_BIN"
+            ls /tmp/sparkle/bin/ || true
+            exit 1
+          fi
+
+          # Write private key to a temp file (deleted immediately after use)
+          PRIVKEY_FILE=$(mktemp)
+          printf '%s' "$SPARKLE_EDDSA_PRIVATE_KEY" > "$PRIVKEY_FILE"
+
+          # sign_update outputs the raw base64 EdDSA signature.
+          RAW_OUTPUT=$("$SIGN_UPDATE_BIN" "$DMG_NAME" -f "$PRIVKEY_FILE")
+          rm -f "$PRIVKEY_FILE"
+
+          # The output is "sparkle:edSignature=<base64> sparkle:shortVersionString=..."
+          # or just the raw base64 depending on the Sparkle version. Extract the
+          # base64 portion robustly.
+          if echo "$RAW_OUTPUT" | grep -q "edSignature="; then
+            SIGNATURE=$(echo "$RAW_OUTPUT" \
+              | grep -o 'edSignature="[^"]*"' \
+              | sed 's/edSignature="//;s/"//')
+          else
+            # Older sign_update outputs only the raw base64 on a single line.
+            SIGNATURE=$(echo "$RAW_OUTPUT" | tr -d '[:space:]')
+          fi
+
+          if [[ -z "$SIGNATURE" ]]; then
+            echo "::error::Could not extract EdDSA signature from sign_update output:"
+            echo "$RAW_OUTPUT"
+            exit 1
+          fi
+
+          FILE_SIZE=$(wc -c < "$DMG_NAME" | tr -d ' ')
+
+          echo "signature=$SIGNATURE" >> "$GITHUB_OUTPUT"
+          echo "file_size=$FILE_SIZE" >> "$GITHUB_OUTPUT"
+          echo "▸ EdDSA: ${SIGNATURE:0:20}… (${FILE_SIZE} bytes)"
+
+      # ── 14. Fetch current appcast.xml from R2 ────────────────────────────
+      # Download the live appcast before updating so that all previous items
+      # are preserved. If the file doesn't exist yet (first release), the
+      # update-appcast.py script creates it from scratch.
+      - name: Fetch appcast.xml from R2
+        continue-on-error: true   # First release: no appcast.xml on R2 yet
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID:         ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET:             ${{ secrets.R2_BUCKET }}
+        run: |
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          aws s3 cp "s3://${R2_BUCKET}/appcast.xml" ./appcast.xml \
+            --endpoint-url "$R2_ENDPOINT" \
+            --region auto \
+            2>/dev/null \
+            && echo "▸ Fetched existing appcast.xml from R2 ($(wc -l < appcast.xml) lines)" \
+            || echo "▸ No appcast.xml on R2 yet — update-appcast.py will create one"
+
+      # ── 15. Update appcast.xml ─────────────────────────────────────────────
+      - name: Update appcast.xml
+        env:
+          DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
+        run: |
+          python3 scripts/update-appcast.py \
+            "$VERSION" \
+            "$BUILD_NUMBER" \
+            "${{ steps.sparkle.outputs.signature }}" \
+            "${{ steps.sparkle.outputs.file_size }}" \
+            "$DMG_NAME" \
+            "${DOWNLOAD_BASE_URL:-https://releases.kerwan.app/releases}"
+
+          echo "▸ appcast.xml updated"
+          # Validate it's well-formed XML
+          python3 -c "import xml.etree.ElementTree as ET; ET.parse('appcast.xml')" \
+            && echo "▸ appcast.xml is valid XML" \
+            || { echo "::error::appcast.xml is not valid XML"; exit 1; }
+          cat appcast.xml
+
+      - name: Upload appcast.xml to R2
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID:         ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET:             ${{ secrets.R2_BUCKET }}
+        run: |
+          aws s3 cp appcast.xml "s3://${R2_BUCKET}/appcast.xml" \
+            --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            --region auto \
+            --content-type "application/rss+xml; charset=utf-8" \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --no-progress
+          echo "▸ appcast.xml live at R2"
+
+      # ── 16. Upload DMG to R2 ──────────────────────────────────────────────
       - name: Upload DMG to R2
         env:
           AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -305,71 +426,10 @@ jobs:
 
           echo "▸ Uploaded: s3://${R2_BUCKET}/${REMOTE_KEY}"
 
-      # ── 14. Sparkle EdDSA signature ───────────────────────────────────────
-      - name: Compute EdDSA signature
-        id: sparkle
-        env:
-          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
-        run: |
-          # Download Sparkle binary tools (pinned version for reproducibility)
-          SPARKLE_VER="2.6.4"
-          echo "▸ Downloading Sparkle ${SPARKLE_VER} tools…"
-          curl -fsSL \
-            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VER}/Sparkle-${SPARKLE_VER}.tar.xz" \
-            -o /tmp/sparkle.tar.xz
-          mkdir -p /tmp/sparkle
-          tar -xJf /tmp/sparkle.tar.xz -C /tmp/sparkle
-
-          # Write private key to a temp file (deleted immediately after use)
-          PRIVKEY_FILE=$(mktemp)
-          printf '%s' "$SPARKLE_EDDSA_PRIVATE_KEY" > "$PRIVKEY_FILE"
-
-          # Sign the DMG
-          SIGNATURE=$(/tmp/sparkle/bin/sign_update "$DMG_NAME" -f "$PRIVKEY_FILE")
-          rm -f "$PRIVKEY_FILE"
-
-          FILE_SIZE=$(wc -c < "$DMG_NAME" | tr -d ' ')
-
-          echo "signature=$SIGNATURE"   >> "$GITHUB_OUTPUT"
-          echo "file_size=$FILE_SIZE"   >> "$GITHUB_OUTPUT"
-          echo "▸ EdDSA signature: ${SIGNATURE:0:20}… (${FILE_SIZE} bytes)"
-
-      # ── 15. Update appcast.xml ────────────────────────────────────────────
-      - name: Update appcast.xml
-        env:
-          DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
-        run: |
-          python3 scripts/update-appcast.py \
-            "$VERSION" \
-            "$BUILD_NUMBER" \
-            "${{ steps.sparkle.outputs.signature }}" \
-            "${{ steps.sparkle.outputs.file_size }}" \
-            "$DMG_NAME" \
-            "${DOWNLOAD_BASE_URL:-https://releases.kerwan.app/releases}"
-
-          echo "▸ appcast.xml updated"
-          cat appcast.xml
-
-      - name: Upload appcast.xml to R2
-        env:
-          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID:         ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET:             ${{ secrets.R2_BUCKET }}
-        run: |
-          aws s3 cp appcast.xml "s3://${R2_BUCKET}/appcast.xml" \
-            --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
-            --region auto \
-            --content-type "application/rss+xml; charset=utf-8" \
-            --cache-control "no-cache, no-store, must-revalidate" \
-            --no-progress
-          echo "▸ appcast.xml live at R2"
-
-      # ── 16. GitHub Release ────────────────────────────────────────────────
+      # ── 17. Build release notes ───────────────────────────────────────────
       - name: Build release notes
         id: notes
         run: |
-          # Extract the section for this version from CHANGELOG.md if it exists
           CHANGELOG=""
           if [[ -f CHANGELOG.md ]]; then
             CHANGELOG=$(awk \
@@ -381,7 +441,6 @@ jobs:
             CHANGELOG="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
           fi
 
-          # Write to a temp file to avoid quoting issues
           {
             echo "## Kerwan ${VERSION}"
             echo ""
@@ -396,6 +455,7 @@ jobs:
 
           echo "notes_file=/tmp/release-notes.md" >> "$GITHUB_OUTPUT"
 
+      # ── 18. Create GitHub Release ─────────────────────────────────────────
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -408,6 +468,22 @@ jobs:
             appcast.xml
           fail_on_unmatched_files: true
 
+      # ── 19. Write job summary ──────────────────────────────────────────────
+      - name: Write release summary
+        if: always()
+        run: |
+          {
+            echo "## Release ${{ steps.ver.outputs.version }}"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Tag | \`${{ steps.ver.outputs.tag }}\` |"
+            echo "| Build | \`${{ steps.ver.outputs.build }}\` |"
+            echo "| DMG | \`${DMG_NAME}\` |"
+            echo "| Pre-release | \`${{ steps.ver.outputs.prerelease }}\` |"
+            echo "| EdDSA | \`${{ steps.sparkle.outputs.signature }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # ── Cleanup (always run) ──────────────────────────────────────────────
       - name: Delete temporary keychain
         if: always()
@@ -415,3 +491,16 @@ jobs:
           security delete-keychain build.keychain 2>/dev/null || true
           rm -f /tmp/sparkle.tar.xz
           rm -rf /tmp/sparkle
+
+      # Upload build logs on failure for post-mortem analysis.
+      - name: Upload build logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: release-build-logs-${{ github.run_number }}
+          path: |
+            build/xcodebuild-archive.log
+            build/xcodebuild-export.log
+            build/notarize-app.log
+            build/notarize-dmg.log
+          if-no-files-found: ignore

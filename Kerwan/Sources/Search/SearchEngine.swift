@@ -372,6 +372,18 @@ public actor SearchEngine {
             break
         }
 
+        // If the caller explicitly provided a contactId filter but intent
+        // classification didn't pick up a .person intent, run the contact
+        // timeline query anyway so the filter is honoured.
+        if results.isEmpty, let contactId = filters.contactId {
+            let r = try await storage.fetchInteractions(
+                forContactId: contactId,
+                limit: Self.topK
+            )
+            results           = r
+            contactMatchedIDs = Set(r.map(\.id))
+        }
+
         return (results, contactMatchedIDs)
     }
 

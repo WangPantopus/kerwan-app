@@ -1,0 +1,122 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Kerwan API — Railway deployment
+#
+# Triggers
+#   push to master  → deploy to production  (uses RAILWAY_TOKEN)
+#   push to staging → deploy to staging     (uses RAILWAY_TOKEN_STAGING)
+#
+# Required GitHub Secrets
+#   RAILWAY_TOKEN         Railway deploy token scoped to the production service
+#   RAILWAY_TOKEN_STAGING Railway deploy token scoped to the staging service
+#
+# Getting a Railway token
+#   Dashboard → Project Settings → Tokens → Generate
+#   Use a separate token per environment (production / staging).
+#
+# The workflow only deploys if the API source, schema, or workflow file itself
+# changed — unrelated commits to the monorepo are ignored.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Deploy API
+
+on:
+  push:
+    branches:
+      - master
+      - staging
+    paths:
+      - "kerwan-api/**"
+      - ".github/workflows/api-deploy.yml"
+
+concurrency:
+  group: api-deploy-${{ github.ref_name }}
+  cancel-in-progress: true   # Newer deploy cancels a queued one on same branch
+
+jobs:
+  deploy:
+    name: Deploy to Railway (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Determine which Railway token to use based on the branch.
+      - name: Set Railway token
+        id: railway
+        run: |
+          if [[ "${{ github.ref_name }}" == "master" ]]; then
+            echo "token=${{ secrets.RAILWAY_TOKEN }}"           >> "$GITHUB_OUTPUT"
+            echo "environment=production"                       >> "$GITHUB_OUTPUT"
+          else
+            echo "token=${{ secrets.RAILWAY_TOKEN_STAGING }}"  >> "$GITHUB_OUTPUT"
+            echo "environment=staging"                         >> "$GITHUB_OUTPUT"
+          fi
+
+      # Verify the token secret is actually set — fail fast with a clear message.
+      - name: Verify Railway token is configured
+        run: |
+          if [[ -z "${{ steps.railway.outputs.token }}" ]]; then
+            echo "::error::Railway token for '${{ steps.railway.outputs.environment }}' is not configured."
+            echo "::error::Add RAILWAY_TOKEN (production) or RAILWAY_TOKEN_STAGING (staging) to GitHub Secrets."
+            exit 1
+          fi
+          echo "▸ Deploying to Railway environment: ${{ steps.railway.outputs.environment }}"
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      # Deploy the kerwan-api service.  The CLI reads the railway.toml in the
+      # service directory and pushes the Docker image to Railway.
+      #
+      # --service  : must match the service name in your Railway project
+      # --detach   : returns immediately; Railway streams logs in the dashboard
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ steps.railway.outputs.token }}
+        working-directory: kerwan-api/nifty-hypatia
+        run: |
+          railway up \
+            --service kerwan-api \
+            --detach \
+            2>&1 | tee /tmp/railway-deploy.log
+
+          # The CLI exits 0 even with --detach if the upload succeeded.
+          echo "▸ Deployment queued.  Monitor progress at https://railway.app"
+
+      # Give Railway up to 5 minutes to complete the deploy, then verify health.
+      - name: Wait for health check
+        env:
+          HEALTH_URL: >-
+            ${{ steps.railway.outputs.environment == 'production'
+              && 'https://api.kerwan.app/api/health'
+              || 'https://api-staging.kerwan.app/api/health' }}
+        run: |
+          echo "▸ Waiting for health check: $HEALTH_URL"
+          for i in $(seq 1 30); do
+            STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
+              --max-time 5 "$HEALTH_URL" || echo "000")
+            if [[ "$STATUS" == "200" ]]; then
+              echo "▸ Health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "  Attempt $i: HTTP $STATUS — retrying in 10s…"
+            sleep 10
+          done
+          echo "::error::Health check did not return 200 after 5 minutes."
+          echo "::error::Check Railway logs: railway logs --service kerwan-api"
+          exit 1
+
+      - name: Write deployment summary
+        if: always()
+        run: |
+          {
+            echo "## API Deployment"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Branch | \`${{ github.ref_name }}\` |"
+            echo "| Environment | \`${{ steps.railway.outputs.environment }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Triggered by | @${{ github.actor }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

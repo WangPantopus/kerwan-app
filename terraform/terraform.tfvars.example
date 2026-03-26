@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# terraform.tfvars.example
+#
+# Copy this file to terraform.tfvars and fill in your real values.
+# terraform.tfvars is .gitignored — never commit it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Cloudflare authentication ─────────────────────────────────────────────────
+# Create an API token at: https://dash.cloudflare.com/profile/api-tokens
+# Use the "Edit Cloudflare Workers" template and add:
+#   • R2 Storage:Edit   (account level)
+#   • DNS:Edit          (zone level, for kerwan.app)
+#   • Zone:Read         (zone level, for kerwan.app)
+cloudflare_api_token  = "your-cloudflare-api-token-here"
+cloudflare_account_id = "your-32-char-account-id-here"
+
+# ── DNS zone ──────────────────────────────────────────────────────────────────
+zone_name = "kerwan.app"
+
+# ── R2 bucket ─────────────────────────────────────────────────────────────────
+r2_releases_bucket   = "kerwan-releases"
+r2_releases_location = "WNAM"   # Western North America — closest to your users
+
+# ── Subdomains ────────────────────────────────────────────────────────────────
+releases_subdomain = "releases"   # → releases.kerwan.app
+api_subdomain      = "api"        # → api.kerwan.app
+
+# ── Railway ───────────────────────────────────────────────────────────────────
+# Found in Railway → kerwan-api → Settings → Networking → Generated Domain
+railway_domain = "kerwan-api.up.railway.app"
+
+# ── Email (Resend) ────────────────────────────────────────────────────────────
+# Set to true and fill in the DKIM values from your Resend dashboard.
+# Dashboard → Domains → your domain → DNS Records
+create_email_records     = false
+resend_dkim_record_name  = "resend._domainkey"
+resend_dkim_record_value = "something.dkim.resend.com"
+
+# ── Cloudflare Pages (marketing site) ─────────────────────────────────────────
+# Leave empty if the marketing site is not on Cloudflare Pages.
+pages_project_name = ""   # e.g. "kerwan-marketing"

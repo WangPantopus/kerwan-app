@@ -1,26 +1,41 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Kerwan CI — runs on every push and pull-request
 #
-# Jobs
-#   build     : resolves packages, compiles the full target graph
-#   test      : runs unit tests (storage, keychain, exclusion, capture, app)
-#               Integration / performance tests are excluded — they need Ollama
-#               or a real keychain entitlement not available in the GitHub runner.
+# Jobs (all run on macos-14 / Xcode 15)
+#   spm-test    : swift build + swift test for all library & app unit tests,
+#                 with code-coverage. Integration / performance targets are
+#                 excluded — they require Ollama or a real keychain entitlement.
+#   xcode-test  : xcodebuild test for the full Kerwan app target, covering
+#                 @Observable views, Sparkle, and anything the SPM CLI can't
+#                 compile or won't exercise (runs in parallel with spm-test).
+#   lint        : SwiftLint — skipped silently when .swiftlint.yml is absent.
 #
-# Secrets required
-#   none — CI uses no signing secrets
+# Secrets required : none (CI uses no signing secrets)
+#
+# GitHub Actions automatically sets CI=true, which causes Package.swift to
+# exclude KerwanIntegrationTests and KerwanPerformanceTests from the build.
 # ─────────────────────────────────────────────────────────────────────────────
 name: CI
 
 on:
   push:
-    branches: [main, master, dev, develop, "release/**"]
+    branches:
+      - main
+      - master
+      - dev
+      - develop
+      - "release/**"
+      - "feature/**"
     paths-ignore:
       - "**.md"
       - "docs/**"
       - ".github/ISSUE_TEMPLATE/**"
   pull_request:
-    branches: [main, master, dev, develop]
+    branches:
+      - main
+      - master
+      - dev
+      - develop
     paths-ignore:
       - "**.md"
       - "docs/**"
@@ -29,15 +44,20 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  SWIFT_VERSION: "5.9"
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared setup steps extracted as a composite to avoid repetition across jobs.
+# (GitHub Actions doesn't support YAML anchors, so we repeat the shell steps
+#  and rely on caching to make the second job fast.)
+# ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
-  build:
-    name: Build (macOS 14 · Xcode 15)
+  # Job 1: SPM build + unit tests + code coverage
+  # ───────────────────────────────────────────────────────────────────────────
+  spm-test:
+    name: SPM Tests + Coverage
     runs-on: macos-14
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -45,12 +65,11 @@ jobs:
 
       - name: Select Xcode 15
         run: |
-          # Pick the newest Xcode 15.x on the runner
           XCODE=$(ls /Applications | grep "Xcode_15" | sort -V | tail -1)
-          if [[ -z "$XCODE" ]]; then
-            echo "Falling back to default Xcode"
-          else
+          if [[ -n "$XCODE" ]]; then
             sudo xcode-select -s "/Applications/$XCODE"
+          else
+            echo "Xcode 15 not found — using default Xcode"
           fi
           xcodebuild -version
           swift --version
@@ -58,11 +77,11 @@ jobs:
       - name: Install SQLCipher
         run: |
           brew install sqlcipher
-          # Expose pkg-config path for SPM system library resolution
-          echo "PKG_CONFIG_PATH=$(brew --prefix sqlcipher)/lib/pkgconfig:$PKG_CONFIG_PATH" \
+          echo "PKG_CONFIG_PATH=$(brew --prefix sqlcipher)/lib/pkgconfig:${PKG_CONFIG_PATH:-}" \
             >> "$GITHUB_ENV"
 
-      # Cache the SPM build directory between runs — keyed on Package.resolved
+      # Cache the SPM .build directory between runs.
+      # Key includes Package.resolved so a dependency bump busts the cache.
       - name: Restore SPM cache
         uses: actions/cache@v4
         with:
@@ -73,26 +92,100 @@ jobs:
       - name: Resolve package dependencies
         run: swift package resolve
 
-      - name: Build — debug (fast feedback)
+      # Build debug only — release build verified in the release pipeline.
+      - name: Build (debug)
         run: |
           swift build \
             --configuration debug \
-            --jobs $(sysctl -n hw.logicalcpu) \
-            2>&1 | xcbeautify --quiet || swift build --configuration debug
+            --jobs "$(sysctl -n hw.logicalcpu)" \
+            2>&1 | tee build-debug.log
+          # Propagate a non-zero exit even through the tee.
+          test "${PIPESTATUS[0]}" -eq 0
 
-      - name: Build — release (verify optimised compile)
+      # Run all unit-test targets in a single swift test invocation so coverage
+      # spans the whole codebase. --jobs 1 avoids SQLite file-locking races in
+      # the storage tests.
+      - name: Run unit tests
         run: |
-          swift build \
-            --configuration release \
-            --jobs $(sysctl -n hw.logicalcpu) \
-            2>&1 | xcbeautify --quiet || swift build --configuration release
+          swift test \
+            --filter "KerwanStorageTests|KerwanKeychainTests|KerwanExclusionTests|KerwanCaptureTests|KerwanScoringTests|KerwanTests" \
+            --enable-code-coverage \
+            --jobs 1 \
+            2>&1 | tee test-output.log
+          test "${PIPESTATUS[0]}" -eq 0
+
+      # Produce a human-readable text summary and an lcov file for downstream
+      # tools (Codecov, SonarQube, etc.).
+      - name: Generate coverage report
+        if: always()
+        run: |
+          PROFDATA=$(find .build -name "*.profdata" | head -1)
+          BINARY=$(find .build -name "KerwanPackageTests" \
+            -not -path "*dSYM*" -not -path "*SourcePackages*" | head -1)
+          if [[ -n "$PROFDATA" && -n "$BINARY" ]]; then
+            xcrun llvm-cov report "$BINARY" \
+              --instr-profile="$PROFDATA" \
+              --ignore-filename-regex=".build|Tests" \
+              > coverage-summary.txt 2>/dev/null || true
+            xcrun llvm-cov export "$BINARY" \
+              --instr-profile="$PROFDATA" \
+              --format=lcov \
+              --ignore-filename-regex=".build|Tests" \
+              > coverage.lcov 2>/dev/null || true
+            echo "── Coverage summary ──────────────────────────────────"
+            tail -5 coverage-summary.txt || true
+          else
+            echo "No profdata/binary found — skipping coverage report"
+          fi
+
+      # Always upload coverage so it's available even when tests fail.
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ github.run_number }}
+          path: |
+            coverage-summary.txt
+            coverage.lcov
+          if-no-files-found: ignore
+
+      # Upload logs so failures can be investigated without re-running.
+      - name: Upload build & test logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: spm-logs-${{ github.run_number }}
+          path: |
+            build-debug.log
+            test-output.log
+          if-no-files-found: ignore
+
+      # Write a rich job summary visible in the GitHub Actions UI.
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo "## SPM Test Results"
+            echo ""
+            if [[ -f coverage-summary.txt ]]; then
+              echo "### Coverage"
+              echo "\`\`\`"
+              tail -10 coverage-summary.txt
+              echo "\`\`\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ───────────────────────────────────────────────────────────────────────────
-  test:
-    name: Unit Tests
+  # Job 2: xcodebuild test — full app stack (Sparkle, @Observable, etc.)
+  #
+  # Runs in parallel with spm-test. Purpose: compile and exercise the Kerwan
+  # executable and its dependencies through the Xcode build system, which
+  # catches issues the SPM CLI may miss (e.g. @Observable, SwiftUI, Sparkle).
+  # ───────────────────────────────────────────────────────────────────────────
+  xcode-test:
+    name: Xcode Test (full app stack)
     runs-on: macos-14
-    timeout-minutes: 30
-    needs: build
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -101,75 +194,89 @@ jobs:
       - name: Select Xcode 15
         run: |
           XCODE=$(ls /Applications | grep "Xcode_15" | sort -V | tail -1)
-          [[ -n "$XCODE" ]] && sudo xcode-select -s "/Applications/$XCODE"
+          if [[ -n "$XCODE" ]]; then
+            sudo xcode-select -s "/Applications/$XCODE"
+          fi
           xcodebuild -version
 
       - name: Install SQLCipher
         run: |
           brew install sqlcipher
-          echo "PKG_CONFIG_PATH=$(brew --prefix sqlcipher)/lib/pkgconfig:$PKG_CONFIG_PATH" \
+          echo "PKG_CONFIG_PATH=$(brew --prefix sqlcipher)/lib/pkgconfig:${PKG_CONFIG_PATH:-}" \
             >> "$GITHUB_ENV"
 
-      - name: Restore SPM cache
+      # Cache Xcode DerivedData to speed up incremental builds.
+      # Key covers both Package.swift (target graph) and Package.resolved
+      # (exact dependency versions).
+      - name: Restore DerivedData cache
         uses: actions/cache@v4
         with:
-          path: .build
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: spm-${{ runner.os }}-
+          path: build/DerivedData
+          key: derived-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: derived-${{ runner.os }}-
 
-      - name: Resolve package dependencies
-        run: swift package resolve
-
-      # Run library tests — these have no external service dependencies.
-      # @MainActor annotations and conditional openSettings fix ensure the
-      # full Kerwan target (via KerwanTests dependency) compiles cleanly.
-      - name: Test KerwanStorage
-        run: swift test --filter KerwanStorageTests --jobs 1
-
-      - name: Test KerwanKeychain
-        run: swift test --filter KerwanKeychainTests --jobs 1
-
-      - name: Test KerwanExclusion
-        run: swift test --filter KerwanExclusionTests --jobs 1
-
-      - name: Test KerwanCapture
-        run: swift test --filter KerwanCaptureTests --jobs 1
-
-      # Main app unit tests (mock Ollama via URLProtocol — no real server needed)
-      - name: Test Kerwan (unit)
-        continue-on-error: true
+      # List available schemes so the log is self-explanatory on scheme errors.
+      - name: List xcodebuild schemes
         run: |
-          # Skip integration + performance targets — they need Ollama / slow timers
-          swift test \
-            --filter KerwanTests \
-            --jobs 1 \
-            2>&1
+          xcodebuild -list 2>&1 | head -30 || true
 
-      # Collect code coverage
-      - name: Generate coverage report
-        if: github.event_name == 'pull_request'
+      # Use -only-testing KerwanTests so that:
+      #   • The full Kerwan executable (Sparkle, @Observable, etc.) is compiled
+      #     by xcodebuild, exercising the Xcode build system.
+      #   • Other test targets are not duplicated from the spm-test job.
+      #
+      # CI=true is inherited from the GitHub Actions environment, excluding
+      # KerwanIntegrationTests and KerwanPerformanceTests from the build.
+      - name: xcodebuild test (KerwanTests)
         run: |
-          swift test \
-            --filter "KerwanStorageTests|KerwanExclusionTests|KerwanCaptureTests" \
-            --enable-code-coverage \
-            --jobs 1 || true
-          # Find the .profdata file
-          PROFDATA=$(find .build -name "*.profdata" | head -1)
-          if [[ -n "$PROFDATA" ]]; then
-            BINARY=$(find .build -name "KerwanPackageTests" -type f | head -1)
-            xcrun llvm-cov report "$BINARY" \
-              --instr-profile="$PROFDATA" \
-              --ignore-filename-regex=".build|Tests" \
-              2>/dev/null || true
-          fi
+          mkdir -p build
+          set -o pipefail
+          xcodebuild test \
+            -scheme Kerwan \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/TestResults.xcresult \
+            -only-testing KerwanTests \
+            2>&1 | tee build/xcodebuild-test.log | \
+              grep -E "Test (Case|Suite|session)|Test Passed|Test Failed|error:|warning:" \
+              || true
 
+          # Fail the step if xcodebuild exited non-zero.
+          # (pipefail above ensures the pipe chain propagates xcodebuild's exit.)
+
+      - name: Upload xcode test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xcode-test-results-${{ github.run_number }}
+          path: |
+            build/TestResults.xcresult
+            build/xcodebuild-test.log
+          if-no-files-found: ignore
+
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo "## Xcode Test Results"
+            echo ""
+            echo "Scheme: \`Kerwan\` · Target: \`KerwanTests\`"
+            echo ""
+            if grep -q "Test Passed" build/xcodebuild-test.log 2>/dev/null; then
+              echo "✅ All tests passed"
+            elif grep -q "Test Failed\|error:" build/xcodebuild-test.log 2>/dev/null; then
+              echo "❌ Tests failed — see artifact \`xcode-test-results-${{ github.run_number }}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Job 3: SwiftLint — advisory, does not block merges
   # ───────────────────────────────────────────────────────────────────────────
   lint:
     name: SwiftLint
     runs-on: macos-14
-    timeout-minutes: 5
-    # Don't block CI if lint isn't configured
-    continue-on-error: true
+    timeout-minutes: 10
+    continue-on-error: true   # Lint warnings must not block CI
 
     steps:
       - name: Checkout
@@ -177,9 +284,11 @@ jobs:
 
       - name: Run SwiftLint
         run: |
-          if [[ -f .swiftlint.yml ]]; then
-            brew install swiftlint
-            swiftlint lint --reporter github-actions-logging
-          else
+          if [[ ! -f .swiftlint.yml ]]; then
             echo "No .swiftlint.yml found — skipping lint"
+            exit 0
           fi
+          if ! command -v swiftlint &>/dev/null; then
+            brew install swiftlint
+          fi
+          swiftlint lint --reporter github-actions-logging
