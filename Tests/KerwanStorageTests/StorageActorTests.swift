@@ -50,7 +50,7 @@ final class StorageActorTests: XCTestCase {
     func test_migration_fresh_database_createsAllTables() async throws {
         let storage = try makeStorage()
         let settings = await storage.fetchUserSettings()
-        XCTAssertEqual(settings.schemaVersion, 2)
+        XCTAssertEqual(settings.schemaVersion, 3)
     }
 
     func test_migration_idempotent_runningTwiceDoesNotFail() async throws {
@@ -490,7 +490,7 @@ final class StorageActorTests: XCTestCase {
         XCTAssertTrue(sessions2.isEmpty)
         // Settings should be re-seeded
         let settings = await storage.fetchUserSettings()
-        XCTAssertEqual(settings.schemaVersion, 2)
+        XCTAssertEqual(settings.schemaVersion, 3)
     }
 
     // MARK: - Concurrent Read During Write
