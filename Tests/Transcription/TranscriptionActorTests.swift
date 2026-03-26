@@ -12,6 +12,7 @@
 // • WAVSpool tests use a temporary directory so production files are untouched.
 
 import XCTest
+import KerwanXPCProtocol
 @testable import Kerwan
 
 // MARK: - MockWhisperTranscribing
@@ -49,13 +50,13 @@ actor MockWhisperTranscribing: WhisperTranscribing {
 // MARK: - MockEventDelegate
 
 actor MockEventDelegate: CaptureEventDelegate {
-    private(set) var batches: [[RawEvent]] = []
+    private(set) var batches: [[CaptureEvent]] = []
 
-    func didCapture(_ events: [RawEvent]) async {
+    func didCapture(_ events: [CaptureEvent]) async {
         batches.append(events)
     }
 
-    var allEvents: [RawEvent] { batches.flatMap { $0 } }
+    var allEvents: [CaptureEvent] { batches.flatMap { $0 } }
 }
 
 // MARK: - Helpers
@@ -277,7 +278,7 @@ final class SpeakingSessionTests: XCTestCase {
         s.addChunkSegments([
             makeSegment(text: "Hello there", start: 0, end: 3, language: "en", confidence: 0.95),
         ], chunkStart: t0, overlapSeconds: 0)
-        let event = s.toRawEvent()
+        let event = s.toCaptureEvent()
 
         XCTAssertEqual(event.source, .audio)
         XCTAssertEqual(event.startedAt, t0)
@@ -449,7 +450,7 @@ final class TranscriptionActorLifecycleTests: XCTestCase {
 
     func test_start_withLoadError_stateRemainsIdle() async {
         let (ta, whisper, _) = makeActor()
-        whisper.loadError = WhisperServiceError.modelLoadFailed
+        whisper.loadError = WhisperServiceError.modelLoadFailed(reason: "test")
         do {
             try await ta.start()
             XCTFail("Expected throw")
@@ -523,7 +524,7 @@ final class TranscriptionActorPipelineTests: XCTestCase {
 
     // MARK: Single chunk → RawEvent
 
-    func test_singleChunk_emitsOneRawEvent() async throws {
+    func test_singleChunk_emitsOneCaptureEvent() async throws {
         let (ta, _, delegate) = makeActor(segments: [
             makeSegment(text: "Hello world", start: 0, end: 3),
         ])
@@ -623,7 +624,7 @@ final class TranscriptionActorPipelineTests: XCTestCase {
         whisper.transcribeError = nil
         // We can't easily set per-call error without a more complex mock,
         // so just test that a persistent error produces no events.
-        whisper.transcribeError = WhisperServiceError.transcriptionFailed
+        whisper.transcribeError = WhisperServiceError.transcriptionFailed(reason: "test")
 
         try await ta.start()
         await ta.didCaptureAudioChunk(makeChunk())
@@ -672,7 +673,7 @@ final class TranscriptionActorPipelineTests: XCTestCase {
 
     // MARK: Classification delegate
 
-    func test_classificationDelegate_receivesRawEvent() async throws {
+    func test_classificationDelegate_receivesCaptureEvent() async throws {
         let classDel = MockEventDelegate()
         let whisper3 = MockWhisperTranscribing()
         whisper3.segmentsToReturn = [makeSegment(text: "Hi", start: 0, end: 1)]

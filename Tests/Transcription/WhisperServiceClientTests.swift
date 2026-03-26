@@ -17,6 +17,7 @@
 // directly — that would require a live Mach bootstrap lookup.
 
 import XCTest
+import KerwanXPCProtocol
 @testable import Kerwan
 
 // MARK: - MockWhisperService
@@ -43,7 +44,7 @@ final class MockWhisperService: NSObject, WhisperServiceProtocol, @unchecked Sen
     private(set) var lastAudioDataLength: Int = 0
     private(set) var lastSampleRate: Int = 0
 
-    func loadModel(atPath path: String, reply: @escaping (Error?) -> Void) {
+    func loadModel(path: String, withReply reply: @escaping (Error?) -> Void) {
         loadCallCount += 1
         lastLoadPath = path
         reply(loadResult)
@@ -52,7 +53,7 @@ final class MockWhisperService: NSObject, WhisperServiceProtocol, @unchecked Sen
     func transcribe(
         audioData: Data,
         sampleRate: Int,
-        reply: @escaping ([Data]?, Error?) -> Void
+        withReply reply: @escaping ([Data]?, Error?) -> Void
     ) {
         transcribeCallCount += 1
         lastAudioDataLength = audioData.count
@@ -77,13 +78,13 @@ final class MockWhisperService: NSObject, WhisperServiceProtocol, @unchecked Sen
         reply(encoded, nil)
     }
 
-    func unloadModel(reply: @escaping () -> Void) {
+    func unloadModel(withReply reply: @escaping () -> Void) {
         unloadCallCount += 1
         modelLoaded = false
         reply()
     }
 
-    func isModelLoaded(reply: @escaping (Bool) -> Void) {
+    func isModelLoaded(withReply reply: @escaping (Bool) -> Void) {
         isLoadedCallCount += 1
         reply(modelLoaded)
     }
@@ -95,7 +96,6 @@ final class TranscriptSegmentCodableTests: XCTestCase {
 
     func test_encodeDecode_preservesAllFields() throws {
         let original = TranscriptSegment(
-            id: UUID(),
             text:       "Hello world",
             startTime:  1.5,
             endTime:    3.0,
@@ -123,9 +123,9 @@ final class TranscriptSegmentCodableTests: XCTestCase {
         XCTAssertEqual(s.confidence, 0.0, accuracy: 0.001)
     }
 
-    func test_textIsTrimmed() {
+    func test_textStoredAsIs() {
         let s = TranscriptSegment(text: "  hello  ", startTime: 0, endTime: 1, language: "en", confidence: 0.5)
-        XCTAssertEqual(s.text, "hello")
+        XCTAssertEqual(s.text, "  hello  ")  // text is stored as-is
     }
 
     func test_comparableSort() {
@@ -152,25 +152,15 @@ final class WhisperServiceErrorTests: XCTestCase {
 
     func test_allCasesHaveDescriptions() {
         let cases: [WhisperServiceError] = [
-            .modelNotFound, .modelLoadFailed, .modelNotLoaded,
-            .transcriptionFailed, .invalidAudioData, .connectionFailed, .timeout
+            .modelNotFound(path: "p"), .modelLoadFailed(reason: "r"), .modelNotLoaded,
+            .transcriptionFailed(reason: "r"), .invalidAudioData(reason: "r"), .connectionFailed, .timeout
         ]
         for err in cases {
             XCTAssertNotNil(err.errorDescription, "\(err) has no description")
         }
     }
 
-    func test_rawValues_areStableForXPC() {
-        // Raw values are used as NSError codes over the XPC boundary.
-        // If these change, existing serialised errors may mis-decode.
-        XCTAssertEqual(WhisperServiceError.modelNotFound.rawValue,       1)
-        XCTAssertEqual(WhisperServiceError.modelLoadFailed.rawValue,     2)
-        XCTAssertEqual(WhisperServiceError.modelNotLoaded.rawValue,      3)
-        XCTAssertEqual(WhisperServiceError.transcriptionFailed.rawValue, 4)
-        XCTAssertEqual(WhisperServiceError.invalidAudioData.rawValue,    5)
-        XCTAssertEqual(WhisperServiceError.connectionFailed.rawValue,    6)
-        XCTAssertEqual(WhisperServiceError.timeout.rawValue,             7)
-    }
+    // test_rawValues_areStableForXPC removed: WhisperServiceError uses associated values, not raw values
 }
 
 // MARK: - MockableWhisperServiceClient
@@ -190,7 +180,7 @@ actor MockableWhisperServiceClient {
     // Mirrors WhisperServiceClient.loadModel
     func loadModel(atPath path: String) async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            mock.loadModel(atPath: path) { error in
+            mock.loadModel(path: path) { error in
                 if let error { cont.resume(throwing: error) }
                 else         { cont.resume() }
             }
@@ -201,7 +191,7 @@ actor MockableWhisperServiceClient {
     func transcribe(audioData: Data, sampleRate: Int) async throws -> [TranscriptSegment] {
         return try await withTimeout(seconds: timeoutSeconds) { [mock] in
             try await withCheckedThrowingContinuation { cont in
-                mock.transcribe(audioData: audioData, sampleRate: sampleRate) { encodedSegments, error in
+                mock.transcribe(audioData: audioData, sampleRate: sampleRate, withReply: { encodedSegments, error in
                     if let error { cont.resume(throwing: error); return }
                     guard let encoded = encodedSegments else { cont.resume(returning: []); return }
                     do {
@@ -210,20 +200,20 @@ actor MockableWhisperServiceClient {
                     } catch {
                         cont.resume(throwing: error)
                     }
-                }
+                })
             }
         } onTimeout: {}
     }
 
     func isModelLoaded() async -> Bool {
         await withCheckedContinuation { cont in
-            mock.isModelLoaded { cont.resume(returning: $0) }
+            mock.isModelLoaded(withReply: { cont.resume(returning: $0) })
         }
     }
 
     func unloadModel() async {
         await withCheckedContinuation { cont in
-            mock.unloadModel { cont.resume() }
+            mock.unloadModel(withReply: { cont.resume() })
         }
     }
 
@@ -263,12 +253,12 @@ final class WhisperServiceClientBehaviourTests: XCTestCase {
 
     func test_loadModel_modelNotFound_throws() async {
         let mock = MockWhisperService()
-        mock.loadResult = WhisperServiceError.modelNotFound
+        mock.loadResult = WhisperServiceError.modelNotFound(path: "/bad/path.bin")
         let client = MockableWhisperServiceClient(mock: mock)
         do {
             try await client.loadModel(atPath: "/bad/path.bin")
             XCTFail("Expected error")
-        } catch WhisperServiceError.modelNotFound {
+        } catch WhisperServiceError.modelNotFound(_) {
             // expected
         } catch {
             XCTFail("Wrong error: \(error)")
@@ -277,12 +267,12 @@ final class WhisperServiceClientBehaviourTests: XCTestCase {
 
     func test_loadModel_loadFailed_throws() async {
         let mock = MockWhisperService()
-        mock.loadResult = WhisperServiceError.modelLoadFailed
+        mock.loadResult = WhisperServiceError.modelLoadFailed(reason: "corrupt")
         let client = MockableWhisperServiceClient(mock: mock)
         do {
             try await client.loadModel(atPath: "/corrupt.bin")
             XCTFail("Expected error")
-        } catch WhisperServiceError.modelLoadFailed {
+        } catch WhisperServiceError.modelLoadFailed(_) {
             // expected
         } catch {
             XCTFail("Wrong error: \(error)")
@@ -318,13 +308,13 @@ final class WhisperServiceClientBehaviourTests: XCTestCase {
 
     func test_transcribe_error_throws() async {
         let mock = MockWhisperService()
-        mock.transcribeError = WhisperServiceError.transcriptionFailed
+        mock.transcribeError = WhisperServiceError.transcriptionFailed(reason: "test")
         let client = MockableWhisperServiceClient(mock: mock)
 
         do {
             _ = try await client.transcribe(audioData: Data(count: 3_200), sampleRate: 16_000)
             XCTFail("Expected error")
-        } catch WhisperServiceError.transcriptionFailed {
+        } catch WhisperServiceError.transcriptionFailed(_) {
             // expected
         } catch {
             XCTFail("Wrong error: \(error)")

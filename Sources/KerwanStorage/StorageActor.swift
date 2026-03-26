@@ -1222,4 +1222,30 @@ public actor StorageActor {
     private func escapeSQL(_ s: String) -> String {
         s.replacingOccurrences(of: "'", with: "''")
     }
+
+    // MARK: - AppStorageService extensions
+
+    /// Returns the count of raw events recorded since midnight (local time).
+    public func countRawEventsToday() throws -> Int {
+        let midnight = Calendar.current.startOfDay(for: Date())
+        let ts = midnight.timeIntervalSince1970
+        let v: Int64? = try? reader.withConnection { conn in
+            try conn.scalar(
+                "SELECT count(*) FROM raw_events WHERE timestamp >= ?",
+                bindings: [.real(ts)]
+            )
+        }
+        return Int(v ?? 0)
+    }
+
+    /// Persists a user-authored manual note as a `documentAccess` source raw event.
+    public func insertManualNote(text: String, at date: Date) throws {
+        let event = RawEvent(
+            id:        UUID().uuidString,
+            timestamp: date,
+            source:    .documentAccess,
+            metadata:  text
+        )
+        try insertRawEvents([event])
+    }
 }

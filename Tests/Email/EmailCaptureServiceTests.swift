@@ -101,8 +101,8 @@ actor MockIMAPClient: IMAPClientProtocol {
 // MARK: - EmailMockEventDelegate
 
 actor EmailMockEventDelegate: CaptureEventDelegate {
-    private(set) var allEvents: [RawEvent] = []
-    func didCapture(_ events: [RawEvent]) async {
+    private(set) var allEvents: [CaptureEvent] = []
+    func didCapture(_ events: [CaptureEvent]) async {
         allEvents.append(contentsOf: events)
     }
 }

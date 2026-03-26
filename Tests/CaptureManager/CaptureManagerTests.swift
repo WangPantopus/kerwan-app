@@ -16,6 +16,7 @@
 //  EventPipelineIntegrationTests— end-to-end: mock service → buffer → storage
 
 import XCTest
+import KerwanXPCProtocol
 @testable import Kerwan
 
 // MARK: - Mock AppState
@@ -42,14 +43,14 @@ actor MockAppState: AppStateManaging {
 // MARK: - Mock Storage
 
 actor MockStorage: StorageManaging {
-    private(set) var savedEvents: [RawEvent] = []
+    private(set) var savedEvents: [CaptureEvent] = []
     private var shouldThrow: Bool
 
     init(shouldThrow: Bool = false) { self.shouldThrow = shouldThrow }
 
     func setShouldThrow(_ value: Bool) { shouldThrow = value }
 
-    func saveRawEvent(_ event: RawEvent) async throws {
+    func saveRawEvent(_ event: CaptureEvent) async throws {
         if shouldThrow { throw StorageError.fake }
         savedEvents.append(event)
     }
@@ -118,7 +119,7 @@ final class MockCalendarService: CalendarCapturing {
 
 final class CMockExclusionEngine: ExclusionChecking, @unchecked Sendable {
     var blockedSources: Set<CaptureSource> = []
-    func shouldExclude(_ event: RawEvent) -> Bool {
+    func shouldExclude(_ event: CaptureEvent) -> Bool {
         blockedSources.contains(event.source)
     }
 }
@@ -134,8 +135,8 @@ actor MockWhisperClient: WhisperTranscribing {
 
 // MARK: - Helpers
 
-private func makeRawEvent(source: CaptureSource = .calendar) -> RawEvent {
-    RawEvent(source: source, sourceApp: "Test", startedAt: Date(), endedAt: Date())
+private func makeCaptureEvent(source: CaptureSource = .calendar) -> CaptureEvent {
+    CaptureEvent(source: source, sourceApp: "Test", startedAt: Date(), endedAt: Date())
 }
 
 // MARK: - Environment factory for tests
@@ -166,7 +167,7 @@ extension CaptureManager.Environment {
         let whisper      = MockWhisperClient()
         let appState     = MockAppState()
         let storage      = MockStorage()
-        let buffer       = RawEventBuffer(
+        let buffer       = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
@@ -202,18 +203,18 @@ extension CaptureManager.Environment {
 
 // MARK: - RawEventBufferTests
 
-final class RawEventBufferTests: XCTestCase {
+final class CaptureEventBufferTests: XCTestCase {
 
     func test_didCapture_storesNonExcludedEvents() async throws {
         let storage  = MockStorage()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
         )
 
-        let events = [makeRawEvent(), makeRawEvent()]
+        let events = [makeCaptureEvent(), makeCaptureEvent()]
         await buffer.didCapture(events)
         try await Task.sleep(nanoseconds: 30_000_000)  // let background task run
 
@@ -224,13 +225,13 @@ final class RawEventBufferTests: XCTestCase {
     func test_didCapture_incrementsEventCount() async {
         let storage  = MockStorage()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
         )
 
-        await buffer.didCapture([makeRawEvent(), makeRawEvent(), makeRawEvent()])
+        await buffer.didCapture([makeCaptureEvent(), makeCaptureEvent(), makeCaptureEvent()])
         let today = await appState.eventsToday
         XCTAssertEqual(today, 3)
     }
@@ -240,16 +241,16 @@ final class RawEventBufferTests: XCTestCase {
         engine.blockedSources = [.audio]
         let storage  = MockStorage()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: engine,
             storage:         storage,
             appState:        appState
         )
 
         await buffer.didCapture([
-            makeRawEvent(source: .audio),     // blocked
-            makeRawEvent(source: .calendar),  // allowed
-            makeRawEvent(source: .audio),     // blocked
+            makeCaptureEvent(source: .audio),     // blocked
+            makeCaptureEvent(source: .calendar),  // allowed
+            makeCaptureEvent(source: .audio),     // blocked
         ])
         try await Task.sleep(nanoseconds: 30_000_000)
 
@@ -262,15 +263,15 @@ final class RawEventBufferTests: XCTestCase {
         let engine   = CMockExclusionEngine()
         engine.blockedSources = [.audio]
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: engine,
             storage:         MockStorage(),
             appState:        appState
         )
 
         await buffer.didCapture([
-            makeRawEvent(source: .audio),
-            makeRawEvent(source: .calendar),
+            makeCaptureEvent(source: .audio),
+            makeCaptureEvent(source: .calendar),
         ])
 
         let today = await appState.eventsToday
@@ -282,15 +283,15 @@ final class RawEventBufferTests: XCTestCase {
         engine.blockedSources = [.audio, .calendar]
         let storage  = MockStorage()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: engine,
             storage:         storage,
             appState:        appState
         )
 
         await buffer.didCapture([
-            makeRawEvent(source: .audio),
-            makeRawEvent(source: .calendar),
+            makeCaptureEvent(source: .audio),
+            makeCaptureEvent(source: .calendar),
         ])
         try await Task.sleep(nanoseconds: 30_000_000)
 
@@ -301,20 +302,20 @@ final class RawEventBufferTests: XCTestCase {
     func test_didCapture_storageFailure_doesNotPropagate() async {
         let storage  = MockStorage(shouldThrow: true)
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
         )
         // Should not throw — fire-and-forget storage
-        await buffer.didCapture([makeRawEvent()])
+        await buffer.didCapture([makeCaptureEvent()])
         try? await Task.sleep(nanoseconds: 30_000_000)
         // Test passes if no crash occurs; storage failure is swallowed silently
     }
 
     func test_didCapture_emptyEvents_noSideEffects() async throws {
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -325,13 +326,13 @@ final class RawEventBufferTests: XCTestCase {
     }
 
     func test_totalAcceptedCount_tracked() async {
-        let buffer = RawEventBuffer(
+        let buffer = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        MockAppState()
         )
-        await buffer.didCapture([makeRawEvent(), makeRawEvent()])
-        await buffer.didCapture([makeRawEvent()])
+        await buffer.didCapture([makeCaptureEvent(), makeCaptureEvent()])
+        await buffer.didCapture([makeCaptureEvent()])
         let total = await buffer.totalAcceptedCount
         XCTAssertEqual(total, 3)
     }
@@ -339,15 +340,15 @@ final class RawEventBufferTests: XCTestCase {
     func test_totalExcludedCount_tracked() async {
         let engine = CMockExclusionEngine()
         engine.blockedSources = [.audio]
-        let buffer = RawEventBuffer(
+        let buffer = CaptureEventBuffer(
             exclusionEngine: engine,
             storage:         MockStorage(),
             appState:        MockAppState()
         )
         await buffer.didCapture([
-            makeRawEvent(source: .audio),
-            makeRawEvent(source: .audio),
-            makeRawEvent(source: .calendar),
+            makeCaptureEvent(source: .audio),
+            makeCaptureEvent(source: .audio),
+            makeCaptureEvent(source: .calendar),
         ])
         let excl = await buffer.totalExcludedCount
         XCTAssertEqual(excl, 2)
@@ -366,7 +367,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
         let cal  = MockCalendarService()
         let appState = MockAppState()
         let storage  = MockStorage()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
@@ -388,7 +389,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
 
     func test_startAll_setsRunningStatus() async throws {
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -399,7 +400,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
         await manager.startAll()
 
         let status = await appState.lastStatus
-        XCTAssertEqual(status, .running)
+        XCTAssertEqual(status, .capturing)
 
         await manager.stopAll()
     }
@@ -409,7 +410,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
         let ax  = MockAccessibilityService()
         let cal = MockCalendarService()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -435,7 +436,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
         let sys = MockAudioService()
         let cal = MockCalendarService()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -456,7 +457,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
 
     func test_stopAll_setsIdleStatus() async throws {
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -475,7 +476,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
         let mic = MockAudioService()
         let sys = MockAudioService()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -498,7 +499,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
     func test_pauseAll_stopsAccessibilityService() async throws {
         let ax = MockAccessibilityService()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -518,7 +519,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
         let mic = MockAudioService()
         let sys = MockAudioService()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -534,7 +535,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
         XCTAssertEqual(sys.resumeCount, 1)
 
         let status = await appState.lastStatus
-        XCTAssertEqual(status, .running)
+        XCTAssertEqual(status, .capturing)
 
         await manager.stopAll()
     }
@@ -544,7 +545,7 @@ final class CaptureManagerLifecycleTests: XCTestCase {
         let whisper = MockWhisperClient()
         let appState = MockAppState()
         let storage  = MockStorage()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
@@ -595,7 +596,7 @@ final class PrivateModeTests: XCTestCase {
         let mic  = MockAudioService()
         let sys  = MockAudioService()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -618,7 +619,7 @@ final class PrivateModeTests: XCTestCase {
         let mic  = MockAudioService()
         let sys  = MockAudioService()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -633,7 +634,7 @@ final class PrivateModeTests: XCTestCase {
         XCTAssertEqual(mic.resumeCount, 1)
         XCTAssertEqual(sys.resumeCount, 1)
         let status = await appState.lastStatus
-        XCTAssertEqual(status, .running)
+        XCTAssertEqual(status, .capturing)
 
         await manager.stopAll()
     }
@@ -641,7 +642,7 @@ final class PrivateModeTests: XCTestCase {
     func test_doubleEnterPrivateMode_isNoOp() async throws {
         let mic  = MockAudioService()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -669,7 +670,7 @@ final class BatteryAwarenessTests: XCTestCase {
         let sys  = MockAudioService()
         let nc   = NotificationCenter()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -699,7 +700,7 @@ final class BatteryAwarenessTests: XCTestCase {
         let sys  = MockAudioService()
         let nc   = NotificationCenter()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -729,7 +730,7 @@ final class BatteryAwarenessTests: XCTestCase {
         let sys  = MockAudioService()
         let nc   = NotificationCenter()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -761,7 +762,7 @@ final class BatteryAwarenessTests: XCTestCase {
         let mic  = MockAudioService()
         let nc   = NotificationCenter()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -791,7 +792,7 @@ final class ErrorRecoveryTests: XCTestCase {
     func test_failedService_markedInServiceStatus() async throws {
         let mic = MockAudioService(); mic.throwOnStart = true
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -810,7 +811,7 @@ final class ErrorRecoveryTests: XCTestCase {
     func test_failedService_degradedCaptureStatus() async throws {
         let mic = MockAudioService(); mic.throwOnStart = true
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -820,10 +821,10 @@ final class ErrorRecoveryTests: XCTestCase {
 
         await manager.startAll()
         let status = await appState.lastStatus
-        if case .degraded(let names) = status {
-            XCTAssertTrue(names.contains("Microphone"))
+        if case .error(let msg) = status {
+            XCTAssertTrue(msg.contains("Microphone"))
         } else {
-            XCTFail("Expected .degraded status, got \(String(describing: status))")
+            XCTFail("Expected .error status, got \(String(describing: status))")
         }
         await manager.stopAll()
     }
@@ -831,7 +832,7 @@ final class ErrorRecoveryTests: XCTestCase {
     func test_recoveryLoop_retriesFailedService() async throws {
         let mic  = MockAudioService(); mic.throwOnStart = true
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -875,7 +876,7 @@ final class MidnightResetTests: XCTestCase {
         }
 
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
@@ -902,14 +903,14 @@ final class EventPipelineIntegrationTests: XCTestCase {
     func test_calendarEvent_flowsToStorage() async throws {
         let storage  = MockStorage()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
         )
 
         // Simulate CalendarCaptureService emitting an event
-        let event = RawEvent(
+        let event = CaptureEvent(
             source:       .calendar,
             sourceApp:    "Calendar",
             startedAt:    Date(),
@@ -926,13 +927,13 @@ final class EventPipelineIntegrationTests: XCTestCase {
     func test_emailEvent_flowsToStorage() async throws {
         let storage  = MockStorage()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
         )
 
-        let event = RawEvent(source: .email, sourceApp: "Gmail", startedAt: Date())
+        let event = CaptureEvent(source: .email, sourceApp: "Gmail", startedAt: Date())
         await buffer.didCapture([event])
         try await Task.sleep(nanoseconds: 30_000_000)
 
@@ -944,16 +945,16 @@ final class EventPipelineIntegrationTests: XCTestCase {
     func test_multipleServices_eventsAggregated() async throws {
         let storage  = MockStorage()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
         )
 
         // Simulate different services emitting concurrently
-        async let a: () = buffer.didCapture([makeRawEvent(source: .calendar)])
-        async let b: () = buffer.didCapture([makeRawEvent(source: .email)])
-        async let c: () = buffer.didCapture([makeRawEvent(source: .appFocus)])
+        async let a: () = buffer.didCapture([makeCaptureEvent(source: .calendar)])
+        async let b: () = buffer.didCapture([makeCaptureEvent(source: .email)])
+        async let c: () = buffer.didCapture([makeCaptureEvent(source: .appFocus)])
         _ = await (a, b, c)
         try await Task.sleep(nanoseconds: 50_000_000)
 
@@ -968,15 +969,15 @@ final class EventPipelineIntegrationTests: XCTestCase {
         engine.blockedSources = [.screenCapture]
         let storage  = MockStorage()
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: engine,
             storage:         storage,
             appState:        appState
         )
 
         await buffer.didCapture([
-            makeRawEvent(source: .screenCapture),  // blocked
-            makeRawEvent(source: .calendar),       // allowed
+            makeCaptureEvent(source: .screenCapture),  // blocked
+            makeCaptureEvent(source: .calendar),       // allowed
         ])
         try await Task.sleep(nanoseconds: 30_000_000)
 
@@ -987,14 +988,14 @@ final class EventPipelineIntegrationTests: XCTestCase {
 
     func test_eventCount_incrementedAcrossMultipleBatches() async {
         let appState = MockAppState()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         MockStorage(),
             appState:        appState
         )
 
         for _ in 0..<5 {
-            await buffer.didCapture([makeRawEvent(), makeRawEvent()])
+            await buffer.didCapture([makeCaptureEvent(), makeCaptureEvent()])
         }
 
         let today = await appState.eventsToday
@@ -1006,7 +1007,7 @@ final class EventPipelineIntegrationTests: XCTestCase {
         let cal = MockCalendarService()
         let appState = MockAppState()
         let storage  = MockStorage()
-        let buffer   = RawEventBuffer(
+        let buffer   = CaptureEventBuffer(
             exclusionEngine: PassthroughExclusionEngine(),
             storage:         storage,
             appState:        appState
@@ -1020,7 +1021,7 @@ final class EventPipelineIntegrationTests: XCTestCase {
         XCTAssertTrue(cal.isRunning)
 
         // Emit an event through the buffer (simulating what the services would do)
-        await buffer.didCapture([makeRawEvent(source: .calendar)])
+        await buffer.didCapture([makeCaptureEvent(source: .calendar)])
         try await Task.sleep(nanoseconds: 30_000_000)
 
         let saved = await storage.savedEvents

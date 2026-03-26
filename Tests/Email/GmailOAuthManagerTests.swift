@@ -58,7 +58,7 @@ actor MockCallbackServer: OAuthCallbackServing {
 // MARK: - MockKeychain
 
 /// In-memory Keychain replacement.
-final class MockKeychain: KeychainManaging, @unchecked Sendable {
+final class MockKeychain: GmailKeychainManaging, @unchecked Sendable {
     private var store: [String: String] = [:]
     private let lock = NSLock()
 
