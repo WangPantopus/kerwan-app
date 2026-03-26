@@ -247,7 +247,7 @@ final class OllamaClientTests: XCTestCase {
     }
 
     func testComplete_includesSystemWhenProvided() async throws {
-        var capturedBody: [String: Any]?
+        nonisolated(unsafe) var capturedBody: [String: Any]?
         MockOllamaURLProtocol.register(path: "api/generate") { request in
             if let body = request.httpBody,
                let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
@@ -268,7 +268,7 @@ final class OllamaClientTests: XCTestCase {
     }
 
     func testComplete_omitsSystemWhenNil() async throws {
-        var capturedBody: [String: Any]?
+        nonisolated(unsafe) var capturedBody: [String: Any]?
         MockOllamaURLProtocol.register(path: "api/generate") { request in
             if let body = request.httpBody,
                let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
@@ -322,7 +322,7 @@ final class OllamaClientTests: XCTestCase {
     }
 
     func testCompleteJSON_requestIncludesFormatJSON() async throws {
-        var capturedBody: [String: Any]?
+        nonisolated(unsafe) var capturedBody: [String: Any]?
         MockOllamaURLProtocol.register(path: "api/generate") { request in
             if let body = request.httpBody,
                let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
@@ -351,7 +351,7 @@ final class OllamaClientTests: XCTestCase {
     }
 
     func testEmbed_sendsCorrectRequestBody() async throws {
-        var capturedBody: [String: Any]?
+        nonisolated(unsafe) var capturedBody: [String: Any]?
         MockOllamaURLProtocol.register(path: "api/embeddings") { request in
             if let body = request.httpBody,
                let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
@@ -401,7 +401,7 @@ final class OllamaClientTests: XCTestCase {
     }
 
     func testEmbedBatch_sendsArrayInput() async throws {
-        var capturedBody: [String: Any]?
+        nonisolated(unsafe) var capturedBody: [String: Any]?
         MockOllamaURLProtocol.register(path: "api/embed") { request in
             if let body = request.httpBody,
                let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
@@ -432,7 +432,7 @@ final class OllamaClientTests: XCTestCase {
             (200, Data(ndjson.utf8))
         }
 
-        var progressValues: [Double] = []
+        nonisolated(unsafe) var progressValues: [Double] = []
         try await client.pullModel(name: "llama3:8b-instruct-q4_K_M") { fraction in
             progressValues.append(fraction)
         }
@@ -468,7 +468,7 @@ final class OllamaClientTests: XCTestCase {
     }
 
     func testPullModel_sendsCorrectRequestBody() async throws {
-        var capturedBody: [String: Any]?
+        nonisolated(unsafe) var capturedBody: [String: Any]?
         MockOllamaURLProtocol.register(path: "api/pull") { request in
             if let body = request.httpBody,
                let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {

@@ -11,6 +11,7 @@ import os
 ///
 /// The sidebar badge (`AppState.pendingReviewCount`) reflects `.suggested` count
 /// and is updated in real time by `ReviewQueueViewModel.syncBadge()`.
+@MainActor
 struct ReviewQueueView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

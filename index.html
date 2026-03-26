@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kerwan — Never forget a client detail. Never miss a billable hour.</title>
+  <meta name="description" content="Kerwan silently captures every client interaction on your Mac and turns it into searchable memory and precise time logs. Privacy-first, local-only." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'media',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#eef6ff',
+              100: '#d9ecff',
+              200: '#bbdcfe',
+              300: '#8cc5fd',
+              400: '#58a4f9',
+              500: '#3182f4',
+              600: '#1a63e9',
+              700: '#134fd6',
+              800: '#1540ad',
+              900: '#163a88',
+            },
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    /* Smooth scroll offset for anchor links */
+    :target { scroll-margin-top: 5rem; }
+
+    /* Gradient hero background */
+    .hero-gradient {
+      background: linear-gradient(135deg, #0c1824 0%, #17304a 50%, #1a3d5c 100%);
+    }
+
+    /* FAQ accordion */
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .faq-chevron { transform: rotate(180deg); }
+
+    /* Animated underline on CTA */
+    .cta-link::after {
+      content: '';
+      display: block;
+      height: 2px;
+      background: currentColor;
+      transform: scaleX(0);
+      transition: transform 0.2s;
+      transform-origin: left;
+    }
+    .cta-link:hover::after { transform: scaleX(1); }
+  </style>
+</head>
+
+<body class="bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased">
+
+  <!-- ─── NAV ──────────────────────────────────────────────────────────────── -->
+  <header class="sticky top-0 z-50 border-b border-gray-100 dark:border-gray-800 bg-white/90 dark:bg-gray-950/90 backdrop-blur-md">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+      <a href="#" class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Kerwan</a>
+      <nav class="hidden sm:flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
+        <a href="#how-it-works" class="hover:text-gray-900 dark:hover:text-white transition-colors">How it works</a>
+        <a href="#features"     class="hover:text-gray-900 dark:hover:text-white transition-colors">Features</a>
+        <a href="#pricing"      class="hover:text-gray-900 dark:hover:text-white transition-colors">Pricing</a>
+        <a href="#faq"          class="hover:text-gray-900 dark:hover:text-white transition-colors">FAQ</a>
+      </nav>
+      <a href="#download"
+         class="text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white px-4 py-1.5 rounded-lg transition-colors">
+        Download
+      </a>
+    </div>
+  </header>
+
+  <!-- ─── HERO ─────────────────────────────────────────────────────────────── -->
+  <section class="hero-gradient text-white">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-24 sm:py-36 text-center">
+      <div class="inline-flex items-center gap-2 text-xs font-medium bg-white/10 text-blue-200 border border-white/20 rounded-full px-3 py-1 mb-8">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+        Mac-only · Local AI · No cloud
+      </div>
+
+      <h1 class="text-4xl sm:text-6xl font-bold leading-tight tracking-tight mb-6">
+        Never forget a client detail.<br class="hidden sm:block" />
+        Never miss a billable hour.
+      </h1>
+
+      <p class="text-lg sm:text-xl text-blue-100 max-w-2xl mx-auto mb-10">
+        Kerwan silently captures every meeting, email, and conversation on your Mac, then turns it into searchable memory and precise time logs — all processed locally, never uploaded.
+      </p>
+
+      <div id="download" class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="https://releases.kerwan.app/releases/Kerwan-latest.dmg"
+           class="flex items-center gap-2 bg-white text-gray-900 font-semibold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all text-base">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          Download for Mac
+        </a>
+        <span class="text-blue-200 text-sm">macOS 13 Ventura or later · Apple Silicon &amp; Intel</span>
+      </div>
+
+      <!-- Social proof -->
+      <p class="mt-12 text-blue-300 text-sm">
+        Built for freelancers, consultants, and indie professionals who bill by the hour.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── HOW IT WORKS ──────────────────────────────────────────────────────── -->
+  <section id="how-it-works" class="py-20 sm:py-28 bg-gray-50 dark:bg-gray-900">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6">
+      <div class="text-center mb-14">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-3">How Kerwan works</h2>
+        <p class="text-gray-500 dark:text-gray-400 max-w-xl mx-auto">Three steps from chaos to clarity. No setup wizards, no cloud accounts, no surprises.</p>
+      </div>
+
+      <div class="grid sm:grid-cols-3 gap-8">
+        <!-- Step 1 -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-sm border border-gray-100 dark:border-gray-700">
+          <div class="w-12 h-12 rounded-xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+          </div>
+          <div class="text-xs font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-2">Step 1</div>
+          <h3 class="text-lg font-semibold mb-2">Run it once</h3>
+          <p class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">Grant Screen Recording permission and Kerwan runs silently in the background. It captures meetings, emails, browser tabs, and desktop apps — turning your screen into structured memory.</p>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-sm border border-gray-100 dark:border-gray-700">
+          <div class="w-12 h-12 rounded-xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+          </div>
+          <div class="text-xs font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-2">Step 2</div>
+          <h3 class="text-lg font-semibold mb-2">Ask anything</h3>
+          <p class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">Search "what did Sarah say about the logo last Tuesday?" and get an answer in seconds. Local LLM (Ollama) understands context — no data ever leaves your machine.</p>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-sm border border-gray-100 dark:border-gray-700">
+          <div class="w-12 h-12 rounded-xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div class="text-xs font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-2">Step 3</div>
+          <h3 class="text-lg font-semibold mb-2">Bill accurately</h3>
+          <p class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">Kerwan automatically assigns time to clients based on what you were doing. Export a clean invoice at the end of the month — no more guessing how long things took.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── FEATURES ──────────────────────────────────────────────────────────── -->
+  <section id="features" class="py-20 sm:py-28">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6">
+      <div class="text-center mb-14">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-3">Everything you need. Nothing you don't.</h2>
+        <p class="text-gray-500 dark:text-gray-400 max-w-xl mx-auto">Built for professionals who value their privacy and their time.</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-6">
+
+        <!-- Feature 1 -->
+        <div class="flex gap-5 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-brand-200 dark:hover:border-brand-800 transition-colors">
+          <div class="flex-shrink-0 w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">Privacy-first by design</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">All capture, classification, and search runs entirely on your Mac. SQLite database stays on disk. Ollama runs locally. No telemetry, no sync service, no cloud.</p>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="flex gap-5 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-brand-200 dark:hover:border-brand-800 transition-colors">
+          <div class="flex-shrink-0 w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">Client-aware intelligence</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Kerwan learns who your clients are and what projects they own. Interactions are tagged automatically — so "what's the status of Acme Corp?" always returns the right answer.</p>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="flex gap-5 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-brand-200 dark:hover:border-brand-800 transition-colors">
+          <div class="flex-shrink-0 w-10 h-10 rounded-xl bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">Billing built in</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Time tracking that actually matches what you did. Kerwan logs work sessions per client automatically and exports clean, itemized time reports — ready for your invoice tool.</p>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="flex gap-5 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-brand-200 dark:hover:border-brand-800 transition-colors">
+          <div class="flex-shrink-0 w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">Cross-source memory</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Screen capture, clipboard, browser tabs, meeting transcripts — all indexed together. Search once and get results from Zoom, Gmail, Notion, and Figma in a single list.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── PRICING ───────────────────────────────────────────────────────────── -->
+  <section id="pricing" class="py-20 sm:py-28 bg-gray-50 dark:bg-gray-900">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6">
+      <div class="text-center mb-14">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-3">Simple, honest pricing</h2>
+        <p class="text-gray-500 dark:text-gray-400 max-w-md mx-auto">Pay once for lifetime access — or subscribe and cancel any time. No seat fees.</p>
+      </div>
+
+      <div class="grid sm:grid-cols-3 gap-6 items-stretch">
+
+        <!-- Free -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 border border-gray-200 dark:border-gray-700 flex flex-col">
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-1">Free</h3>
+            <p class="text-gray-500 dark:text-gray-400 text-sm">Try it without spending a penny.</p>
+          </div>
+          <div class="mb-6">
+            <span class="text-4xl font-bold">$0</span>
+            <span class="text-gray-400 text-sm ml-1">forever</span>
+          </div>
+          <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-300 mb-8 flex-1">
+            <li class="flex gap-2"><span class="text-green-500">✓</span> 7-day rolling capture window</li>
+            <li class="flex gap-2"><span class="text-green-500">✓</span> Keyword search</li>
+            <li class="flex gap-2"><span class="text-green-500">✓</span> Up to 3 clients</li>
+            <li class="flex gap-2"><span class="text-gray-300 dark:text-gray-600">✕</span> <span class="text-gray-400 dark:text-gray-500">AI semantic search</span></li>
+            <li class="flex gap-2"><span class="text-gray-300 dark:text-gray-600">✕</span> <span class="text-gray-400 dark:text-gray-500">Time reports &amp; export</span></li>
+          </ul>
+          <a href="https://releases.kerwan.app/releases/Kerwan-latest.dmg"
+             class="block text-center bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 font-medium py-2.5 rounded-lg transition-colors text-sm">
+            Download free
+          </a>
+        </div>
+
+        <!-- Solo — highlighted -->
+        <div class="bg-brand-600 rounded-2xl p-8 border border-brand-700 flex flex-col relative shadow-xl shadow-brand-600/20">
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-400 text-white text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full">Most popular</div>
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold text-white mb-1">Solo</h3>
+            <p class="text-blue-200 text-sm">For independent professionals.</p>
+          </div>
+          <div class="mb-2">
+            <span class="text-4xl font-bold text-white">$19</span>
+            <span class="text-blue-200 text-sm ml-1">/month</span>
+          </div>
+          <p class="text-blue-200 text-xs mb-6">or <strong class="text-white">$149 once</strong> for lifetime access</p>
+          <ul class="space-y-3 text-sm text-blue-100 mb-8 flex-1">
+            <li class="flex gap-2"><span class="text-green-300">✓</span> Unlimited capture history</li>
+            <li class="flex gap-2"><span class="text-green-300">✓</span> AI semantic search (Ollama)</li>
+            <li class="flex gap-2"><span class="text-green-300">✓</span> Unlimited clients</li>
+            <li class="flex gap-2"><span class="text-green-300">✓</span> Time reports &amp; CSV export</li>
+            <li class="flex gap-2"><span class="text-green-300">✓</span> Promise tracking</li>
+          </ul>
+          <a href="https://buy.stripe.com/kerwan-solo"
+             class="block text-center bg-white hover:bg-blue-50 text-brand-700 font-semibold py-2.5 rounded-lg transition-colors text-sm">
+            Get Solo
+          </a>
+        </div>
+
+        <!-- Pro -->
+        <div class="bg-white dark:bg-gray-800 rounded-2xl p-8 border border-gray-200 dark:border-gray-700 flex flex-col">
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-1">Pro</h3>
+            <p class="text-gray-500 dark:text-gray-400 text-sm">For teams and power users.</p>
+          </div>
+          <div class="mb-2">
+            <span class="text-4xl font-bold">$29</span>
+            <span class="text-gray-400 text-sm ml-1">/month</span>
+          </div>
+          <p class="text-gray-400 text-xs mb-6">or <strong class="text-gray-700 dark:text-gray-200">$229 once</strong> for lifetime access</p>
+          <ul class="space-y-3 text-sm text-gray-600 dark:text-gray-300 mb-8 flex-1">
+            <li class="flex gap-2"><span class="text-green-500">✓</span> Everything in Solo</li>
+            <li class="flex gap-2"><span class="text-green-500">✓</span> Priority email support</li>
+            <li class="flex gap-2"><span class="text-green-500">✓</span> Early access to new features</li>
+            <li class="flex gap-2"><span class="text-green-500">✓</span> Custom exclusion rules</li>
+            <li class="flex gap-2"><span class="text-green-500">✓</span> Webhook &amp; Zapier export</li>
+          </ul>
+          <a href="https://buy.stripe.com/kerwan-pro"
+             class="block text-center bg-gray-900 dark:bg-white hover:bg-gray-700 dark:hover:bg-gray-100 text-white dark:text-gray-900 font-medium py-2.5 rounded-lg transition-colors text-sm">
+            Get Pro
+          </a>
+        </div>
+
+      </div>
+
+      <p class="text-center text-gray-400 dark:text-gray-500 text-sm mt-8">
+        All plans include a 14-day money-back guarantee. Lifetime licenses are per-seat, per machine.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── FAQ ───────────────────────────────────────────────────────────────── -->
+  <section id="faq" class="py-20 sm:py-28">
+    <div class="max-w-2xl mx-auto px-4 sm:px-6">
+      <div class="text-center mb-14">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-3">Frequently asked</h2>
+      </div>
+
+      <div class="space-y-3">
+
+        <!-- Q1 -->
+        <details class="group bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden">
+          <summary class="flex items-center justify-between gap-4 p-6 font-medium hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+            <span>Is my data really private? What gets sent to the cloud?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <div class="px-6 pb-6 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+            <p>Nothing. Kerwan processes all screen data, classification, and search locally on your Mac using SQLite and Ollama. There is no sync service and no telemetry. The only network request Kerwan ever makes is checking for software updates via Sparkle — which you can disable in Settings.</p>
+            <p class="mt-3">Stripe handles payment processing; Kerwan itself never transmits your captured data anywhere.</p>
+          </div>
+        </details>
+
+        <!-- Q2 -->
+        <details class="group bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden">
+          <summary class="flex items-center justify-between gap-4 p-6 font-medium hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+            <span>What are the Mac requirements? Do I need to install Ollama separately?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <div class="px-6 pb-6 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+            <p>Kerwan requires macOS 13 Ventura or later and runs on both Apple Silicon and Intel Macs. For keyword search and time tracking, no AI model is needed.</p>
+            <p class="mt-3">For AI semantic search and auto-classification, Kerwan uses <a href="https://ollama.com" class="text-brand-600 dark:text-brand-400 underline underline-offset-2">Ollama</a> running locally. Kerwan will prompt you to install it on first launch if it isn't detected — it's a one-click install and Kerwan manages the model for you.</p>
+          </div>
+        </details>
+
+        <!-- Q3 -->
+        <details class="group bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden">
+          <summary class="flex items-center justify-between gap-4 p-6 font-medium hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+            <span>How is Kerwan different from Toggl, Harvest, or Granola?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <div class="px-6 pb-6 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+            <p><strong class="text-gray-700 dark:text-gray-200">Toggl and Harvest</strong> require you to remember to start and stop timers. Kerwan captures passively — you never touch a button.</p>
+            <p class="mt-3"><strong class="text-gray-700 dark:text-gray-200">Granola</strong> is a meeting notes tool. Kerwan captures your entire work context: browser, apps, documents, and meetings — then connects the dots across all of them.</p>
+            <p class="mt-3">Most importantly, Kerwan is <strong class="text-gray-700 dark:text-gray-200">fully local</strong>. Your client conversations never touch someone else's server.</p>
+          </div>
+        </details>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── CTA BANNER ────────────────────────────────────────────────────────── -->
+  <section class="py-20 hero-gradient text-white text-center">
+    <div class="max-w-2xl mx-auto px-4 sm:px-6">
+      <h2 class="text-3xl sm:text-4xl font-bold mb-4">Start remembering everything.</h2>
+      <p class="text-blue-200 mb-8 text-lg">Free to try. No account required. Your data stays on your Mac.</p>
+      <a href="https://releases.kerwan.app/releases/Kerwan-latest.dmg"
+         class="inline-flex items-center gap-2 bg-white text-gray-900 font-semibold px-8 py-3.5 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all text-base">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        Download Kerwan — it's free
+      </a>
+    </div>
+  </section>
+
+  <!-- ─── FOOTER ────────────────────────────────────────────────────────────── -->
+  <footer class="border-t border-gray-100 dark:border-gray-800 py-10">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400 dark:text-gray-500">
+      <div class="flex items-center gap-1">
+        <span class="font-medium text-gray-700 dark:text-gray-300">Kerwan</span>
+        <span>· Made by YP in Camas, WA</span>
+      </div>
+      <nav class="flex items-center gap-6">
+        <a href="/privacy" class="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Privacy Policy</a>
+        <a href="/terms"   class="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Terms</a>
+        <a href="mailto:support@kerwan.app" class="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Support</a>
+      </nav>
+      <div class="text-xs">&copy; 2025 Kerwan. All rights reserved.</div>
+    </div>
+  </footer>
+
+</body>
+</html>

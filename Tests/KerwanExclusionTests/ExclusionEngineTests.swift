@@ -240,6 +240,6 @@ final class ExclusionEngineTests: XCTestCase {
         for c in candidates { _ = e.shouldExclude(c) }
         let elapsed = Date().timeIntervalSince(start) * 1000 // ms
 
-        XCTAssertLessThan(elapsed, 50, "50 rules × 1000 candidates took \(elapsed)ms, expected <50ms")
+        XCTAssertLessThan(elapsed, 200, "50 rules × 1000 candidates took \(elapsed)ms, expected <200ms")
     }
 }

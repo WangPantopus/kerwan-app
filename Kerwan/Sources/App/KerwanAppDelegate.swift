@@ -43,6 +43,29 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
     /// Keychain manager for retrieving the database passphrase at startup.
     private let keychain = KeychainManager(service: "com.kerwan.app")
 
+    /// Manages license validation, Keychain cache, and feature gating.
+    ///
+    /// Declared `lazy` so it can reference `keychain` after it is initialised.
+    private lazy var licenseManager = LicenseManager(keychain: keychain)
+
+    /// Manages Sparkle 2 auto-updates, including automatic background checks
+    /// and the user-facing update sheet. Created early so Sparkle can schedule
+    /// its first background check as soon as the app finishes launching.
+    let updateManager = UpdateManager()
+
+    /// Drives the pre-call briefing pipeline and post-meeting summarisation.
+    ///
+    /// Uses a local `OllamaClient`; storage is injected later via
+    /// `setStorage(_:)` once the storage workstream lands.
+    let briefingScheduler = BriefingScheduler(ollama: OllamaClient())
+
+    /// Manages the floating briefing panel window.
+    let briefingWindowController = BriefingWindowController()
+
+    /// Unix domain socket server that receives context from the Chrome extension.
+    /// Posts `.kerwanBrowserRawEvent` notifications for downstream storage.
+    let nativeMessagingBridge = NativeMessagingBridge()
+
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -72,8 +95,28 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
         let appState = appState
         let lifecycle = lifecycle
         let keychain = keychain
+        let licenseManager = licenseManager
         if OnboardingViewModel.isCompleted {
             Task {
+                // Step 1 — Validate the license first so feature flags are in
+                // place before the capture and AI pipelines start.
+                do {
+                    let features = try await licenseManager.validate()
+                    let isValid  = await licenseManager.isValid
+                    await MainActor.run {
+                        appState.updateLicense(features: features, isValid: isValid)
+                    }
+                } catch {
+                    // Non-fatal: free-tier is already the LicenseManager default.
+                    Self.logger.warning(
+                        "License validation error at launch: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+
+                // Step 2 — Pass the license manager to the lifecycle so it can
+                // gate history pruning in the refresh loop.
+                await lifecycle.setLicenseManager(licenseManager)
+
                 // Inject concrete storage / capture implementations here as
                 // those workstreams land:
                 //   await lifecycle.inject(storage: ..., capture: ...)
@@ -89,11 +132,42 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
         onboardingController.onComplete = { [weak self] in
             guard let self else { return }
             Task {
-                await self.lifecycle.start(appState: self.appState, keychain: self.keychain)
+                // Validate license before starting services (same flow as above).
+                let licenseManager = self.licenseManager
+                let appState       = self.appState
+                do {
+                    let features = try await licenseManager.validate()
+                    let isValid  = await licenseManager.isValid
+                    await MainActor.run {
+                        appState.updateLicense(features: features, isValid: isValid)
+                    }
+                } catch {
+                    Self.logger.warning(
+                        "Post-onboarding license error: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+                await self.lifecycle.setLicenseManager(self.licenseManager)
+                await self.lifecycle.start(appState: appState, keychain: self.keychain)
             }
             self.openMainWindow()
         }
         onboardingController.showIfNeeded()
+
+        // Start the briefing pipeline — listens for pre-call notifications from
+        // CalendarCaptureService and manages the floating briefing panel.
+        briefingWindowController.start(appDelegate: self)
+        Task { await briefingScheduler.start() }
+
+        // Start the Chrome extension bridge.
+        Task { await nativeMessagingBridge.start() }
+
+        // Observe NMH connection changes and surface them to AppState.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleBrowserConnectionChange),
+            name: .kerwanBrowserExtensionConnectionChanged,
+            object: nil
+        )
 
         // Set up notification infrastructure: register categories, request
         // permission, and schedule the calendar-based safety-net triggers.
@@ -144,6 +218,9 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
         let appState = appState
         let lifecycle = lifecycle
         Task {
+            await briefingScheduler.stop()
+            briefingWindowController.stop()
+            await nativeMessagingBridge.stop()
             await lifecycle.shutdown(appState: appState)
             NSApp.reply(toApplicationShouldTerminate: true)
         }
@@ -214,6 +291,13 @@ final class KerwanAppDelegate: NSObject, NSApplicationDelegate, ObservableObject
             object: nil
         )
         Self.logger.info("Main window open requested")
+    }
+
+    // MARK: - Browser extension
+
+    @objc private func handleBrowserConnectionChange(_ notification: Notification) {
+        let connected = notification.userInfo?["connected"] as? Bool ?? false
+        appState.isBrowserExtensionConnected = connected
     }
 
     /// Reverts to accessory policy when the main window is closed, hiding the

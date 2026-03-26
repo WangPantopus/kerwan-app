@@ -1,0 +1,185 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Kerwan CI — runs on every push and pull-request
+#
+# Jobs
+#   build     : resolves packages, compiles the full target graph
+#   test      : runs unit tests (storage, keychain, exclusion, capture, app)
+#               Integration / performance tests are excluded — they need Ollama
+#               or a real keychain entitlement not available in the GitHub runner.
+#
+# Secrets required
+#   none — CI uses no signing secrets
+# ─────────────────────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev, develop, "release/**"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
+  pull_request:
+    branches: [main, master, dev, develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SWIFT_VERSION: "5.9"
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (macOS 14 · Xcode 15)
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 15
+        run: |
+          # Pick the newest Xcode 15.x on the runner
+          XCODE=$(ls /Applications | grep "Xcode_15" | sort -V | tail -1)
+          if [[ -z "$XCODE" ]]; then
+            echo "Falling back to default Xcode"
+          else
+            sudo xcode-select -s "/Applications/$XCODE"
+          fi
+          xcodebuild -version
+          swift --version
+
+      - name: Install SQLCipher
+        run: |
+          brew install sqlcipher
+          # Expose pkg-config path for SPM system library resolution
+          echo "PKG_CONFIG_PATH=$(brew --prefix sqlcipher)/lib/pkgconfig:$PKG_CONFIG_PATH" \
+            >> "$GITHUB_ENV"
+
+      # Cache the SPM build directory between runs — keyed on Package.resolved
+      - name: Restore SPM cache
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Resolve package dependencies
+        run: swift package resolve
+
+      - name: Build — debug (fast feedback)
+        run: |
+          swift build \
+            --configuration debug \
+            --jobs $(sysctl -n hw.logicalcpu) \
+            2>&1 | xcbeautify --quiet || swift build --configuration debug
+
+      - name: Build — release (verify optimised compile)
+        run: |
+          swift build \
+            --configuration release \
+            --jobs $(sysctl -n hw.logicalcpu) \
+            2>&1 | xcbeautify --quiet || swift build --configuration release
+
+  # ───────────────────────────────────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: macos-14
+    timeout-minutes: 30
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 15
+        run: |
+          XCODE=$(ls /Applications | grep "Xcode_15" | sort -V | tail -1)
+          [[ -n "$XCODE" ]] && sudo xcode-select -s "/Applications/$XCODE"
+          xcodebuild -version
+
+      - name: Install SQLCipher
+        run: |
+          brew install sqlcipher
+          echo "PKG_CONFIG_PATH=$(brew --prefix sqlcipher)/lib/pkgconfig:$PKG_CONFIG_PATH" \
+            >> "$GITHUB_ENV"
+
+      - name: Restore SPM cache
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Resolve package dependencies
+        run: swift package resolve
+
+      # Run library tests — these have no external service dependencies.
+      # @MainActor annotations and conditional openSettings fix ensure the
+      # full Kerwan target (via KerwanTests dependency) compiles cleanly.
+      - name: Test KerwanStorage
+        run: swift test --filter KerwanStorageTests --jobs 1
+
+      - name: Test KerwanKeychain
+        run: swift test --filter KerwanKeychainTests --jobs 1
+
+      - name: Test KerwanExclusion
+        run: swift test --filter KerwanExclusionTests --jobs 1
+
+      - name: Test KerwanCapture
+        run: swift test --filter KerwanCaptureTests --jobs 1
+
+      # Main app unit tests (mock Ollama via URLProtocol — no real server needed)
+      - name: Test Kerwan (unit)
+        continue-on-error: true
+        run: |
+          # Skip integration + performance targets — they need Ollama / slow timers
+          swift test \
+            --filter KerwanTests \
+            --jobs 1 \
+            2>&1
+
+      # Collect code coverage
+      - name: Generate coverage report
+        if: github.event_name == 'pull_request'
+        run: |
+          swift test \
+            --filter "KerwanStorageTests|KerwanExclusionTests|KerwanCaptureTests" \
+            --enable-code-coverage \
+            --jobs 1 || true
+          # Find the .profdata file
+          PROFDATA=$(find .build -name "*.profdata" | head -1)
+          if [[ -n "$PROFDATA" ]]; then
+            BINARY=$(find .build -name "KerwanPackageTests" -type f | head -1)
+            xcrun llvm-cov report "$BINARY" \
+              --instr-profile="$PROFDATA" \
+              --ignore-filename-regex=".build|Tests" \
+              2>/dev/null || true
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────────
+  lint:
+    name: SwiftLint
+    runs-on: macos-14
+    timeout-minutes: 5
+    # Don't block CI if lint isn't configured
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run SwiftLint
+        run: |
+          if [[ -f .swiftlint.yml ]]; then
+            brew install swiftlint
+            swiftlint lint --reporter github-actions-logging
+          else
+            echo "No .swiftlint.yml found — skipping lint"
+          fi

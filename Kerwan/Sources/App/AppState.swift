@@ -74,6 +74,39 @@ final class AppState {
     /// Whether a storage / embedding round-trip is currently in flight.
     var isSearching: Bool = false
 
+    // MARK: - License
+
+    /// The features enabled by the currently resolved license.
+    ///
+    /// Defaults to ``LicenseFeatures/free`` until ``LicenseManager/validate()``
+    /// completes. Views gate paid UI elements on this value.
+    var licenseFeatures: LicenseFeatures = .free
+
+    /// Whether the most recently resolved license was accepted as valid.
+    var isLicenseValid: Bool = false
+
+    /// Updates the observable license state.
+    ///
+    /// Called by `KerwanAppDelegate` after ``LicenseManager/validate()`` resolves.
+    func updateLicense(features: LicenseFeatures, isValid: Bool) {
+        licenseFeatures = features
+        isLicenseValid  = isValid
+        Self.logger.info(
+            "License updated: plan=\(features.plan, privacy: .public) valid=\(isValid, privacy: .public)"
+        )
+    }
+
+    // MARK: - Browser Extension
+
+    /// Whether the Chrome extension is currently connected via the NMH socket.
+    var isBrowserExtensionConnected: Bool = false
+
+    /// Whether browser context capture (LinkedIn / Gmail) is enabled.
+    /// Mirrors the toggle in `BrowserSettingsTab`; persisted to UserDefaults.
+    var browserCaptureEnabled: Bool = UserDefaults.standard.object(forKey: "browserCaptureEnabled") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(browserCaptureEnabled, forKey: "browserCaptureEnabled") }
+    }
+
     // MARK: - Service Availability
 
     /// Whether the WhisperService XPC connection is established and healthy.

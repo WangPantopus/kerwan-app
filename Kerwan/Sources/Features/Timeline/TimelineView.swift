@@ -4,6 +4,7 @@ import SwiftUI
 
 /// Main Timeline view: reverse-chronological feed of all captured interactions,
 /// grouped by date with infinite scroll and client/source/date-range filters.
+@MainActor
 struct TimelineView: View {
 
     @State private var viewModel    = TimelineViewModel()

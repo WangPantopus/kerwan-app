@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Exclusions tab — lets the user add and remove rules that suppress capture
 /// for specific apps, domains, contacts, or window-title regex patterns.
+@MainActor
 struct ExclusionsSettingsTab: View {
     @Bindable var vm: SettingsViewModel
 
@@ -18,6 +19,7 @@ struct ExclusionsSettingsTab: View {
 // MARK: - ExclusionSection
 
 /// One collapsible section per `ExclusionRuleType`.
+@MainActor
 private struct ExclusionSection: View {
     @Bindable var vm: SettingsViewModel
     let ruleType: ExclusionRuleType

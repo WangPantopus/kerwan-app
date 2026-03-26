@@ -2,6 +2,7 @@ import SwiftUI
 
 /// General settings tab — capture toggles, consent, launch-at-login,
 /// daily digest time, and default billing rate.
+@MainActor
 struct GeneralSettingsTab: View {
     @Bindable var vm: SettingsViewModel
 

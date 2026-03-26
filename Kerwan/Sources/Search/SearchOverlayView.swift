@@ -20,6 +20,7 @@ import os
 ///    `appState.isSearching`.
 /// 4. Results render incrementally — keyword hits appear first, semantic
 ///    matches merge in as they arrive.
+@MainActor
 struct SearchOverlayView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

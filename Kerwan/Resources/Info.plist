@@ -45,5 +45,22 @@
     <!-- LSUIElement: app has a menu bar icon but no Dock icon by default -->
     <key>LSUIElement</key>
     <false/>
+
+    <!-- Sparkle 2 auto-update configuration -->
+
+    <!-- Appcast feed URL served by the Kerwan backend -->
+    <key>SUFeedURL</key>
+    <string>https://api.kerwan.app/api/updates/latest</string>
+
+    <!-- EdDSA (ed25519) public key — generate with ./bin/generate_keys from the
+         Sparkle distribution and paste the printed public key here.
+         IMPORTANT: Replace this placeholder before shipping. -->
+    <key>SUPublicEDKey</key>
+    <string>REPLACE_WITH_EDSIG_PUBLIC_KEY</string>
+
+    <!-- Automatic background check interval: 24 hours (86 400 seconds).
+         Sparkle checks this on launch and reschedules accordingly. -->
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
 </dict>
 </plist>

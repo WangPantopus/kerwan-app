@@ -6,6 +6,7 @@ import os
 /// Shows key service statuses and quick-access toggles inline in the main
 /// window, with a button to open the full settings panel (⌘,). This view is
 /// distinct from `KerwanSettingsView` which is the `Settings` scene content.
+@MainActor
 struct SidebarSettingsView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",
@@ -13,7 +14,6 @@ struct SidebarSettingsView: View {
     )
 
     @Environment(AppState.self) private var appState
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         ScrollView {
@@ -27,7 +27,7 @@ struct SidebarSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Open Full Settings…") {
-                    openSettings()
+                    NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
@@ -85,7 +85,7 @@ struct SidebarSettingsView: View {
 
             VStack(spacing: 8) {
                 Button("Open Full Settings…") {
-                    openSettings()
+                    NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .buttonStyle(.borderless)

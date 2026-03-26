@@ -8,6 +8,7 @@ import os
 /// across all confirmed and suggested sessions. Full implementation is provided
 /// by the billing workstream; this view renders the empty state until sessions
 /// are available.
+@MainActor
 struct BillingView: View {
     private static let logger = Logger(
         subsystem: "com.kerwan.app",

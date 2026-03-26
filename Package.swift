@@ -1,5 +1,10 @@
 // swift-tools-version: 5.9
 import PackageDescription
+import Foundation
+
+// Integration and performance tests depend on Ollama and slow timers — exclude
+// them from CI (GitHub Actions sets CI=true) to avoid spurious compile failures.
+let isCI = ProcessInfo.processInfo.environment["CI"] == "true"
 
 /// Kerwan — local-first macOS activity capture and billing assistant.
 ///
@@ -20,6 +25,7 @@ let package = Package(
         // MARK: Executables
         .executable(name: "Kerwan",        targets: ["Kerwan"]),
         .executable(name: "WhisperService", targets: ["WhisperService"]),
+        .executable(name: "kerwan-nmh",     targets: ["KerwanNMH"]),
 
         // MARK: Foundation Libraries (P-003 – P-006)
         .library(name: "KerwanStorage",   targets: ["KerwanStorage"]),
@@ -32,6 +38,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.3"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.0.0"),
     ],
     targets: [
 
@@ -86,6 +93,7 @@ let package = Package(
             name: "Kerwan",
             dependencies: [
                 .product(name: "SQLite", package: "SQLite.swift"),
+                .product(name: "Sparkle", package: "Sparkle"),
                 "KerwanKeychain",
                 "KerwanXPCProtocol",
                 "SQLCipher",
@@ -96,6 +104,11 @@ let package = Package(
             ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
+            ],
+            linkerSettings: [
+                // Required for MachineIdentifier: reads the hardware UUID via
+                // IOPlatformExpertDevice / IORegistryEntryCreateCFProperty.
+                .linkedFramework("IOKit"),
             ]
         ),
 
@@ -115,6 +128,16 @@ let package = Package(
             name: "WhisperService",
             dependencies: ["KerwanXPCProtocol"],
             path: "WhisperService/Sources",
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency"),
+            ]
+        ),
+
+        // MARK: - Chrome Native Messaging Host
+
+        .executableTarget(
+            name: "KerwanNMH",
+            path: "KerwanNMH/Sources",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
@@ -163,14 +186,24 @@ let package = Package(
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
+    ] + (isCI ? [] : [
         .testTarget(
             name: "KerwanIntegrationTests",
-            dependencies: ["Kerwan", "KerwanXPCProtocol"],
+            dependencies: ["Kerwan", "KerwanXPCProtocol", "KerwanStorage", "KerwanCapture"],
             path: "KerwanIntegrationTests",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
+        .testTarget(
+            name: "KerwanPerformanceTests",
+            dependencies: ["Kerwan", "KerwanXPCProtocol", "KerwanStorage", "KerwanCapture"],
+            path: "KerwanPerformanceTests",
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency"),
+            ]
+        ),
+    ]) + [
         .testTarget(
             name: "KerwanScoringTests",
             dependencies: ["KerwanScoring", "KerwanStorage"],
