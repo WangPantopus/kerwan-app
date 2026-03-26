@@ -10,6 +10,8 @@ struct InteractionDetailView: View {
 
     let item: TimelineItem
 
+    @Environment(AppState.self) private var appState
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
 
@@ -187,11 +189,14 @@ struct InteractionDetailView: View {
                 .foregroundStyle(.secondary)
             Spacer()
             Button("View Session") {
-                // TODO: navigate to WorkSessions tab filtered by this interaction
+                // Navigate to the Review Queue where associated work sessions are listed.
+                // Full interaction→session linking will be added when the billing engine
+                // exposes session IDs on the interaction record.
+                appState.selectedSidebarItem = .reviewQueue
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
-            .help("View the billable work session that contains this interaction")
+            .help("Open the Review Queue to find the billable session for this interaction")
         }
         .padding(.top, 2)
     }

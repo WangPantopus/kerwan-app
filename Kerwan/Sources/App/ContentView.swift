@@ -40,8 +40,8 @@ struct ContentView: View {
     /// Live search text bound to the native toolbar search field.
     @State private var searchText: String = ""
 
-    /// Whether to present the New Client sheet.
-    @State private var isPresentingNewClient: Bool = false
+    // isPresentingNewClient removed — "New Client" now routes via AppState.requestNewClient
+    // so ClientListView (which owns ClientListViewModel) handles persistence.
 
     // MARK: - Derived
 
@@ -93,13 +93,6 @@ struct ContentView: View {
         }
         // Hidden keyboard-shortcut buttons (⌘1 – ⌘6) for sidebar sections.
         .background(keyboardShortcutLayer)
-        .sheet(isPresented: $isPresentingNewClient) {
-            NewClientSheet { name, domain, notes in
-                // TODO: persist via StorageActor
-                isPresentingNewClient = false
-            }
-            .environment(appState)
-        }
     }
 
     // MARK: - Sidebar column
@@ -176,9 +169,13 @@ struct ContentView: View {
         }
 
         // New Client — rightmost primary action.
+        // Navigates to the Clients section and signals ClientListView to open
+        // its own sheet (which has full persistence via ClientListViewModel).
         ToolbarItem(placement: .primaryAction) {
             Button {
-                isPresentingNewClient = true
+                selectedItemRaw = SidebarItem.clients.rawValue
+                appState.selectedSidebarItem = .clients
+                appState.requestNewClient = true
             } label: {
                 Label("New Client", systemImage: "plus")
             }
