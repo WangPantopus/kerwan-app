@@ -113,12 +113,16 @@ public actor OAuthCallbackServer: OAuthCallbackServing {
         }
 
         l.newConnectionHandler = { [weak self] connection in
-            Task { await self?.handleConnection(connection) }
+            // Capture `self` as a `let` constant before entering the Task so the
+            // @Sendable closure does not reference a captured `var`. (SR-strict-concurrency)
+            let s = self
+            Task { await s?.handleConnection(connection) }
         }
 
         l.stateUpdateHandler = { [weak self] state in
             if case .failed(let err) = state {
-                Task { await self?.resumeWithError(GmailOAuthError.serverStartFailed(err.localizedDescription)) }
+                let s = self
+                Task { await s?.resumeWithError(GmailOAuthError.serverStartFailed(err.localizedDescription)) }
             }
         }
 

@@ -99,10 +99,13 @@ public actor CaptureEventBuffer: CaptureEventDelegate {
         await appState.incrementEventsToday(by: accepted.count)
 
         // Fire-and-forget: storage failures must not stall the capture pipeline.
-        let storageRef = storage
-        let logRef     = log
+        // Copy `accepted` into a `let` so `Task.detached` captures an immutable snapshot
+        // — required by strict-concurrency (mutable vars cannot be captured in @Sendable closures).
+        let eventsToSave = accepted
+        let storageRef   = storage
+        let logRef       = log
         Task.detached(priority: .background) {
-            for event in accepted {
+            for event in eventsToSave {
                 do {
                     try await storageRef.saveRawEvent(event)
                 } catch {

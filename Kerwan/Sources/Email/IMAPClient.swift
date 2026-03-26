@@ -130,19 +130,33 @@ actor IMAPConnection {
 
     /// Starts the TLS connection and waits for `.ready`.
     func start() async throws {
+        // `OnceFlag` boxes the `resumed` bool behind a lock so the `@Sendable`
+        // `stateUpdateHandler` closure can mutate it safely under strict concurrency.
+        final class OnceFlag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _value = false
+            var value: Bool {
+                lock.lock(); defer { lock.unlock() }
+                return _value
+            }
+            func set() {
+                lock.lock(); defer { lock.unlock() }
+                _value = true
+            }
+        }
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            var resumed = false
+            let resumed = OnceFlag()
             connection.stateUpdateHandler = { state in
-                guard !resumed else { return }
+                guard !resumed.value else { return }
                 switch state {
                 case .ready:
-                    resumed = true
+                    resumed.set()
                     cont.resume()
                 case .failed(let err):
-                    resumed = true
+                    resumed.set()
                     cont.resume(throwing: IMAPError.connectionFailed(err.localizedDescription))
                 case .cancelled:
-                    resumed = true
+                    resumed.set()
                     cont.resume(throwing: IMAPError.connectionClosed)
                 default:
                     break
