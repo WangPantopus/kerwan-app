@@ -7,6 +7,8 @@ import Foundation
 /// cosine similarity (for hybrid search) into a single 0.0–1.0 score
 /// for sort ordering.
 public struct SearchResult: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: SearchResult, rhs: SearchResult) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string), matching the source entity's ID.
     public let id: EntityID
 

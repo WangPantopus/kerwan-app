@@ -26,7 +26,7 @@
 
     <!-- ── Identity ──────────────────────────────────────────────────── -->
     <key>CFBundleIdentifier</key>
-    <string>com.kerwan.WhisperService</string>
+    <string>com.kerwan.app.whisper-service</string>
 
     <key>CFBundleName</key>
     <string>WhisperService</string>
@@ -75,7 +75,7 @@
     <!-- Must match the name passed to NSXPCConnection(serviceName:)
          in WhisperServiceClient.  Use the bundle ID as the service name. -->
     <key>NSXPCServiceName</key>
-    <string>com.kerwan.WhisperService</string>
+    <string>com.kerwan.app.whisper-service</string>
 
     <!-- ── Minimum OS ─────────────────────────────────────────────────── -->
     <key>LSMinimumSystemVersion</key>

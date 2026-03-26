@@ -14,6 +14,8 @@ import Foundation
 /// Interactions with ``isReviewed`` = false were auto-classified and may
 /// need user confirmation of contact/client attribution.
 public struct Interaction: Codable, Sendable, Identifiable, Hashable {
+    public static func == (lhs: Interaction, rhs: Interaction) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
     /// Unique identifier (UUID string).
     public let id: EntityID
 
