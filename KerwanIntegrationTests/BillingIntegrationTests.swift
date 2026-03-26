@@ -28,6 +28,24 @@ actor SpyBillingEngineStorage: BillingEngineStorage {
     }
 }
 
+// MARK: - WorkSessionExport (mirrors the private struct inside InvoiceExporter)
+
+/// Mirrors the shape of `InvoiceExporter`'s private `WorkSessionExport` JSON output
+/// so integration tests can decode and assert on the exported JSON structure.
+private struct WorkSessionExport: Decodable {
+    let id:             String
+    let clientId:       String?
+    let projectId:      String?
+    let startedAt:      Date
+    let endedAt:        Date
+    let durationSecs:   Int
+    let durationHours:  Double
+    let billableStatus: String
+    let description:    String?
+    let invoiceText:    String?
+    let reviewedAt:     Date?
+}
+
 // MARK: - BillingIntegrationTests
 
 /// Integration tests for the billing pipeline:
@@ -70,7 +88,7 @@ final class BillingIntegrationTests: XCTestCase {
     private func makeEvent(
         id:           String  = UUID().uuidString,
         clientId:     String? = "client-A",
-        start:        Date    = Date(timeIntervalSince1970: 1_700_000_000),
+        start:        Date    = Date(),
         durationSecs: Int     = 1_800
     ) -> ClassifiedEvent {
         ClassifiedEvent(
@@ -102,7 +120,7 @@ final class BillingIntegrationTests: XCTestCase {
             makeEvent(id: "e1", start: baseDate,                         durationSecs: 600),
             makeEvent(id: "e2", start: baseDate.addingTimeInterval(600), durationSecs: 600),
         ]
-        let candidates = SessionClusteringEngine.cluster(events)
+        let candidates = SessionClusteringEngine().cluster(events: events)
         XCTAssertEqual(candidates.count, 1,
                        "Two events within the idle gap must cluster into one session")
     }
@@ -110,13 +128,15 @@ final class BillingIntegrationTests: XCTestCase {
     /// Two events for the same client separated by more than 15 minutes must
     /// produce two separate sessions.
     func test_clustering_twoFarEvents_sameClient_twoSessions() {
+        // Gap (end-to-start) must exceed extendedGapThreshold (2700s/45 min) to force a hard split.
+        // e1 ends at baseDate+600, e2 starts at baseDate+3400 → gap = 2800s > 2700s.
         let events = [
             makeEvent(id: "e1", start: baseDate,                              durationSecs: 600),
-            makeEvent(id: "e2", start: baseDate.addingTimeInterval(15 * 60 + 1), durationSecs: 600),
+            makeEvent(id: "e2", start: baseDate.addingTimeInterval(3_400),    durationSecs: 600),
         ]
-        let candidates = SessionClusteringEngine.cluster(events)
+        let candidates = SessionClusteringEngine().cluster(events: events)
         XCTAssertEqual(candidates.count, 2,
-                       "Events separated by more than the idle gap must form separate sessions")
+                       "Events separated by more than the extended idle gap must form separate sessions")
     }
 
     /// Events attributed to different clients must always produce separate sessions.
@@ -125,7 +145,7 @@ final class BillingIntegrationTests: XCTestCase {
             makeEvent(id: "e1", clientId: "client-A", start: baseDate,                         durationSecs: 600),
             makeEvent(id: "e2", clientId: "client-B", start: baseDate.addingTimeInterval(300), durationSecs: 600),
         ]
-        let candidates = SessionClusteringEngine.cluster(events)
+        let candidates = SessionClusteringEngine().cluster(events: events)
         XCTAssertEqual(candidates.count, 2,
                        "Different clients must never be merged into the same session")
     }
@@ -133,14 +153,15 @@ final class BillingIntegrationTests: XCTestCase {
     /// The session's duration must equal the sum of all clustered event durations.
     func test_clustering_sessionDuration_equalsSumOfEventDurations() {
         let d1 = 900, d2 = 1800
+        // Use non-overlapping events so activeDurationSecs == d1 + d2.
         let events = [
-            makeEvent(id: "e1", start: baseDate,                         durationSecs: d1),
-            makeEvent(id: "e2", start: baseDate.addingTimeInterval(600), durationSecs: d2),
+            makeEvent(id: "e1", start: baseDate,                          durationSecs: d1),
+            makeEvent(id: "e2", start: baseDate.addingTimeInterval(Double(d1)), durationSecs: d2),
         ]
-        let candidates = SessionClusteringEngine.cluster(events)
+        let candidates = SessionClusteringEngine().cluster(events: events)
         XCTAssertEqual(candidates.count, 1)
-        XCTAssertEqual(candidates[0].durationSecs, d1 + d2,
-                       "Session duration must equal the sum of clustered event durations")
+        XCTAssertEqual(candidates[0].activeDurationSecs, d1 + d2,
+                       "Session duration must equal the sum of non-overlapping event durations")
     }
 
     /// Ten events for three different clients must produce three sessions.
@@ -156,7 +177,7 @@ final class BillingIntegrationTests: XCTestCase {
                 ))
             }
         }
-        let candidates = SessionClusteringEngine.cluster(events)
+        let candidates = SessionClusteringEngine().cluster(events: events)
         XCTAssertEqual(candidates.count, 3,
                        "Each client's events should form exactly one session")
     }
@@ -186,9 +207,10 @@ final class BillingIntegrationTests: XCTestCase {
 
     /// Two events close together for the same client → one session inserted.
     func test_billingEngine_twoCloseEvents_oneSessionInserted() async throws {
+        let now = Date()
         await storage.seed(events: [
-            makeEvent(id: "e1", start: baseDate,                         durationSecs: 600),
-            makeEvent(id: "e2", start: baseDate.addingTimeInterval(300), durationSecs: 600),
+            makeEvent(id: "e1", start: now,                         durationSecs: 600),
+            makeEvent(id: "e2", start: now.addingTimeInterval(300), durationSecs: 600),
         ])
         try await engine.runDailyClustering()
 
@@ -198,9 +220,10 @@ final class BillingIntegrationTests: XCTestCase {
 
     /// Two events far apart → two sessions.
     func test_billingEngine_twoFarEvents_twoSessionsInserted() async throws {
+        let now = Date()
         await storage.seed(events: [
-            makeEvent(id: "e1", start: baseDate,                              durationSecs: 600),
-            makeEvent(id: "e2", start: baseDate.addingTimeInterval(7_200),    durationSecs: 600),
+            makeEvent(id: "e1", start: now,                              durationSecs: 600),
+            makeEvent(id: "e2", start: now.addingTimeInterval(7_200),    durationSecs: 600),
         ])
         try await engine.runDailyClustering()
 
@@ -308,7 +331,8 @@ final class BillingIntegrationTests: XCTestCase {
         let string = String(data: data, encoding: .utf8) ?? ""
         defer { try? FileManager.default.removeItem(at: url) }
 
-        XCTAssertTrue(string.hasPrefix("\u{FEFF}"), "CSV must start with UTF-8 BOM")
+        // Swift's UTF-8 decoder strips the BOM character when decoding, so check raw bytes instead.
+        XCTAssertTrue(data.prefix(3) == Data([0xEF, 0xBB, 0xBF]), "CSV must start with UTF-8 BOM")
         XCTAssertTrue(string.contains("Date,Client,Project,Description,Hours,Rate,Amount"),
                       "CSV must contain the expected header line")
     }
@@ -360,7 +384,9 @@ final class BillingIntegrationTests: XCTestCase {
         XCTAssertNoThrow(try JSONSerialization.jsonObject(with: data))
 
         // The JSON must be an array with one element.
-        let decoded = try JSONDecoder().decode([WorkSessionExport].self, from: data)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode([WorkSessionExport].self, from: data)
         XCTAssertEqual(decoded.count, 1)
         XCTAssertEqual(decoded[0].invoiceText, "Architecture review — 1.5 hrs")
     }
@@ -372,7 +398,9 @@ final class BillingIntegrationTests: XCTestCase {
         let data     = try Data(contentsOf: url)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let decoded = try JSONDecoder().decode([WorkSessionExport].self, from: data)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode([WorkSessionExport].self, from: data)
         XCTAssertTrue(decoded.isEmpty)
     }
 

@@ -352,7 +352,9 @@ final class ClassificationThroughputTests: XCTestCase {
                 await actor.runClassificationCycle()
                 exp.fulfill()
             }
-            wait(for: [exp], timeout: 15)
+            // 50 events / 10 per batch = 5 batches × 3 s each = 15 s minimum;
+            // allow 30 s to absorb system scheduling jitter.
+            wait(for: [exp], timeout: 30)
         }
     }
 }
