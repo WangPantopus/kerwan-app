@@ -8,6 +8,16 @@
 import XCTest
 @testable import Kerwan
 
+// MARK: - MutBox (strict-concurrency helper)
+
+/// Single-owner mutable box for test closures that need to mutate local state
+/// through a `@Sendable` boundary.  Tests are single-threaded, so the lack of
+/// internal locking is safe here.
+private final class MutBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ v: T) { self.value = v }
+}
+
 // MARK: - Helpers
 
 /// Builds a ModelManager with a fake filesystem and a controllable URLSession.
@@ -71,10 +81,11 @@ final class ModelManagerStateTests: XCTestCase {
     }
 
     func test_refreshState_toReady_whenFileAppearsOnDisk() {
-        // Start with no file.
-        var fileOnDisk = false
+        // Start with no file.  Use MutBox so the @Sendable fileExists closure
+        // can reference mutable state without a strict-concurrency violation.
+        let fileOnDisk = MutBox(false)
         let mgr = ModelManager(environment: ModelManager.Environment(
-            fileExists: { _ in fileOnDisk },
+            fileExists: { _ in fileOnDisk.value },
             createDirectory: { _ in },
             downloadURL: URL(string: "https://example.com/m.bin")!,
             makeSession: { .shared }
@@ -82,22 +93,22 @@ final class ModelManagerStateTests: XCTestCase {
         XCTAssertEqual(mgr.state, .notInstalled)
 
         // Simulate file appearing (another process copied it, etc.).
-        fileOnDisk = true
+        fileOnDisk.value = true
         mgr.refreshState()
         XCTAssertEqual(mgr.state, .ready)
     }
 
     func test_refreshState_toNotInstalled_whenFileRemoved() {
-        var fileOnDisk = true
+        let fileOnDisk = MutBox(true)
         let mgr = ModelManager(environment: ModelManager.Environment(
-            fileExists: { _ in fileOnDisk },
+            fileExists: { _ in fileOnDisk.value },
             createDirectory: { _ in },
             downloadURL: URL(string: "https://example.com/m.bin")!,
             makeSession: { .shared }
         ))
         XCTAssertEqual(mgr.state, .ready)
 
-        fileOnDisk = false
+        fileOnDisk.value = false
         mgr.refreshState()
         XCTAssertEqual(mgr.state, .notInstalled)
     }
@@ -132,17 +143,17 @@ final class ModelManagerStateTests: XCTestCase {
     }
 
     func test_downloadModelIfNeeded_ifReady_doesNotStartDownload() {
-        var sessionCallCount = 0
+        let sessionCallCount = MutBox(0)
         let mgr = makeManager(
             fileExists: true,
             sessionFactory: {
-                sessionCallCount += 1
+                sessionCallCount.value += 1
                 return .shared
             }
         )
         XCTAssertEqual(mgr.state, .ready)
         mgr.downloadModelIfNeeded()
-        XCTAssertEqual(sessionCallCount, 0, "Should not create a session when model is ready")
+        XCTAssertEqual(sessionCallCount.value, 0, "Should not create a session when model is ready")
         XCTAssertEqual(mgr.state, .ready)
     }
 

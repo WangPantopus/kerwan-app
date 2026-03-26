@@ -15,6 +15,16 @@ import XCTest
 import KerwanXPCProtocol
 @testable import Kerwan
 
+// MARK: - MutBox (strict-concurrency helper)
+
+/// Single-owner mutable box used in tests so `@Sendable` closures can mutate
+/// local state without triggering strict-concurrency errors.  Tests are
+/// single-threaded, so the absence of locking is safe.
+private final class MutBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ v: T) { self.value = v }
+}
+
 // MARK: - MockWhisperTranscribing
 
 actor MockWhisperTranscribing: WhisperTranscribing {
@@ -643,9 +653,9 @@ final class TranscriptionActorPipelineTests: XCTestCase {
         ])
         // Make transcription take longer than the chunk.
         whisper.transcribeDelay = 0.5  // 0.5s to transcribe a 0.1s chunk → 0.2x realtime
-        var receivedFactor: Double?
+        let receivedFactor = MutBox(Double?.none)
         let callback: @Sendable (Double) -> Void = { factor in
-            receivedFactor = factor
+            receivedFactor.value = factor
         }
         ta.onBehindRealtime = callback
 
@@ -653,22 +663,22 @@ final class TranscriptionActorPipelineTests: XCTestCase {
         await ta.didCaptureAudioChunk(makeChunk(durationSeconds: 0.1))
         await ta.stop()
 
-        XCTAssertNotNil(receivedFactor, "onBehindRealtime should be called")
-        XCTAssertLessThan(receivedFactor ?? 99, 1.0)
+        XCTAssertNotNil(receivedFactor.value, "onBehindRealtime should be called")
+        XCTAssertLessThan(receivedFactor.value ?? 99, 1.0)
     }
 
     // MARK: Progress tracking
 
     func test_progress_updatesOnEnqueue() async throws {
         let (ta, _, _) = makeActor(segments: [])
-        var progressSnapshots: [TranscriptionActor.Progress] = []
-        ta.onProgressUpdate = { p in progressSnapshots.append(p) }
+        let progressSnapshots = MutBox([TranscriptionActor.Progress]())
+        ta.onProgressUpdate = { p in progressSnapshots.value.append(p) }
 
         try await ta.start()
         await ta.didCaptureAudioChunk(makeChunk())
         await ta.stop()
 
-        XCTAssertFalse(progressSnapshots.isEmpty, "onProgressUpdate should be called")
+        XCTAssertFalse(progressSnapshots.value.isEmpty, "onProgressUpdate should be called")
     }
 
     // MARK: Classification delegate
