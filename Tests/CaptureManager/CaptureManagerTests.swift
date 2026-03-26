@@ -19,6 +19,16 @@ import XCTest
 import KerwanXPCProtocol
 @testable import Kerwan
 
+// MARK: - MutBox (strict-concurrency helper)
+
+/// Single-owner mutable box used in tests so `@Sendable` closures can mutate
+/// local state without triggering strict-concurrency errors.  Tests are
+/// single-threaded, so the absence of locking is safe.
+private final class MutBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ v: T) { self.value = v }
+}
+
 // MARK: - Mock AppState
 
 actor MockAppState: AppStateManaging {
@@ -665,7 +675,7 @@ final class PrivateModeTests: XCTestCase {
 final class BatteryAwarenessTests: XCTestCase {
 
     func test_lowPower_pausesAudioServices() async throws {
-        var lowPower = false
+        let lowPower = MutBox(false)
         let mic  = MockAudioService()
         let sys  = MockAudioService()
         let nc   = NotificationCenter()
@@ -678,13 +688,13 @@ final class BatteryAwarenessTests: XCTestCase {
         let env = CaptureManager.Environment.mock(
             micService:  mic,
             sysService:  sys,
-            powerMode:   { lowPower },
+            powerMode:   { lowPower.value },
             nc:          nc
         )
         let manager = CaptureManager(rawEventBuffer: buffer, appState: appState, environment: env)
 
         await manager.startAll()
-        lowPower = true
+        lowPower.value = true
         nc.post(name: .NSProcessInfoPowerStateDidChange, object: nil)
         try await Task.sleep(nanoseconds: 40_000_000)  // let observer task run
 
@@ -695,7 +705,7 @@ final class BatteryAwarenessTests: XCTestCase {
     }
 
     func test_thermalSerious_pausesAudioServices() async throws {
-        var state = ProcessInfo.ThermalState.nominal
+        let state = MutBox(ProcessInfo.ThermalState.nominal)
         let mic  = MockAudioService()
         let sys  = MockAudioService()
         let nc   = NotificationCenter()
@@ -708,13 +718,13 @@ final class BatteryAwarenessTests: XCTestCase {
         let env = CaptureManager.Environment.mock(
             micService:    mic,
             sysService:    sys,
-            thermalState:  { state },
+            thermalState:  { state.value },
             nc:            nc
         )
         let manager = CaptureManager(rawEventBuffer: buffer, appState: appState, environment: env)
 
         await manager.startAll()
-        state = .serious
+        state.value = .serious
         nc.post(name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
         try await Task.sleep(nanoseconds: 40_000_000)
 
@@ -725,7 +735,7 @@ final class BatteryAwarenessTests: XCTestCase {
     }
 
     func test_powerRestored_resumesAudioServices() async throws {
-        var lowPower = false
+        let lowPower = MutBox(false)
         let mic  = MockAudioService()
         let sys  = MockAudioService()
         let nc   = NotificationCenter()
@@ -737,17 +747,17 @@ final class BatteryAwarenessTests: XCTestCase {
         )
         let env = CaptureManager.Environment.mock(
             micService: mic, sysService: sys,
-            powerMode:  { lowPower }, nc: nc
+            powerMode:  { lowPower.value }, nc: nc
         )
         let manager = CaptureManager(rawEventBuffer: buffer, appState: appState, environment: env)
 
         await manager.startAll()
 
-        lowPower = true
+        lowPower.value = true
         nc.post(name: .NSProcessInfoPowerStateDidChange, object: nil)
         try await Task.sleep(nanoseconds: 40_000_000)
 
-        lowPower = false
+        lowPower.value = false
         nc.post(name: .NSProcessInfoPowerStateDidChange, object: nil)
         try await Task.sleep(nanoseconds: 40_000_000)
 
@@ -758,7 +768,7 @@ final class BatteryAwarenessTests: XCTestCase {
     }
 
     func test_powerStateToggle_doesNotDoubleApply() async throws {
-        var lowPower = false
+        let lowPower = MutBox(false)
         let mic  = MockAudioService()
         let nc   = NotificationCenter()
         let appState = MockAppState()
@@ -768,13 +778,13 @@ final class BatteryAwarenessTests: XCTestCase {
             appState:        appState
         )
         let env = CaptureManager.Environment.mock(
-            micService: mic, powerMode: { lowPower }, nc: nc
+            micService: mic, powerMode: { lowPower.value }, nc: nc
         )
         let manager = CaptureManager(rawEventBuffer: buffer, appState: appState, environment: env)
 
         await manager.startAll()
 
-        lowPower = true
+        lowPower.value = true
         nc.post(name: .NSProcessInfoPowerStateDidChange, object: nil)
         nc.post(name: .NSProcessInfoPowerStateDidChange, object: nil)  // duplicate
         try await Task.sleep(nanoseconds: 60_000_000)
@@ -869,10 +879,10 @@ final class MidnightResetTests: XCTestCase {
         var comps    = calendar.dateComponents([.year, .month, .day], from: Date())
         comps.hour = 23; comps.minute = 59; comps.second = 59
         let almostMidnight = calendar.date(from: comps) ?? Date()
-        var callCount = 0
+        let callCount = MutBox(0)
         let dateProvider: @Sendable () -> Date = {
-            callCount += 1
-            return callCount == 1 ? almostMidnight : Date()
+            callCount.value += 1
+            return callCount.value == 1 ? almostMidnight : Date()
         }
 
         let appState = MockAppState()
