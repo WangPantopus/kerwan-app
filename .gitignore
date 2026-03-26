@@ -36,3 +36,12 @@ Models/*.ggml
 *.env
 .env.*
 credentials.json
+
+# Terraform — never commit real values or state
+terraform/terraform.tfvars
+terraform/backend.conf
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfplan
